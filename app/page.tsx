@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,10 +57,21 @@ interface Device {
   ip: string;
   publicIp?: string;
   mac: string;
-  channel: string;  enabled: boolean;  connected: boolean;
+  channel: string;
+  enabled: boolean;
+  connected: boolean;
   ahkEnabled: boolean;
   lastSeen: string;
   lastChecked: string;
+}
+
+interface HeartbeatStatus {
+  [deviceKey: string]: {
+    connected: boolean;
+    ahkRunning: boolean;
+    lastSeen: number;
+    uptime: number;
+  };
 }
 
 const defaultDevices: Device[] = [
@@ -79,53 +90,11 @@ const defaultDevices: Device[] = [
     publicIp: '103.45.10.22',
     mac: '6C-94-66-63-62-BC',
     channel: '161',
-    connected: true,
-    enabled: true,
-    ahkEnabled: true,
-    lastSeen: 'Today 14:20',
-    lastChecked: 'Just now',
-  },
-  {
-    id: 2,
-    name: 'Warehouse Laptop',
-    model: 'HP ProBook 440',
-    serial: 'RH-BX11',
-    uuid: '550e8400-e29b-41d4-a716-446655440001',
-    hostname: 'WAREHOUSE-1',
-    user: 'Admin',
-    wifi: 'Sailors-Company-Devices-Only',
-    wifiSecurity: 'WPA2-Enterprise',
-    bssid: 'CC:DD:22:33',
-    ip: '192.168.0.20',
-    publicIp: '103.45.10.24',
-    mac: '6C-94-66-63-62-BD',
-    channel: '161',
     connected: false,
-    enabled: false,
-    ahkEnabled: false,
-    lastSeen: 'Today 13:05',
-    lastChecked: '15:05',
-  },
-  {
-    id: 3,
-    name: 'Finance Laptop',
-    model: 'Lenovo ThinkPad E14',
-    serial: 'RH-CX98',
-    uuid: '550e8400-e29b-41d4-a716-446655440002',
-    hostname: 'FINANCE-01',
-    user: 'Finance',
-    wifi: 'Sailors-Company-Devices-Only',
-    wifiSecurity: 'WPA2-Enterprise',
-    bssid: 'EE:FF:44:55',
-    ip: '10.10.10.8',
-    publicIp: '103.45.10.26',
-    mac: '6C-94-66-63-62-BE',
-    channel: '161',
-    connected: true,
     enabled: true,
-    ahkEnabled: true,
-    lastSeen: 'Yesterday',
-    lastChecked: 'Yesterday',
+    ahkEnabled: false,
+    lastSeen: 'Never',
+    lastChecked: 'Never',
   },
 ];
 
@@ -135,6 +104,7 @@ export default function Home() {
   const [form, setForm] = useState(blankForm);
   const STORAGE_KEY = 'rh-house-devices';
   const [devices, setDevices] = useState<Device[]>([]);
+  const [heartbeatStatus, setHeartbeatStatus] = useState<HeartbeatStatus>({});
   const [networkInfo, setNetworkInfo] = useState({
     connectionType: 'Detecting...',
     localIp: 'Detecting...',
@@ -142,7 +112,9 @@ export default function Home() {
     publicIp: 'Detecting...',
     isOnline: null as boolean | null,
   });
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Load devices from localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -158,11 +130,96 @@ export default function Home() {
     }
   }, []);
 
+  // Save devices to localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && devices.length > 0) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(devices));
     }
   }, [devices]);
+
+  // Fetch real-time device status from API
+  const fetchDeviceStatus = async () => {
+    try {
+      const response = await fetch('/api/devices/heartbeat', {
+        method: 'GET',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.devices && Array.isArray(data.devices)) {
+          const newStatus: HeartbeatStatus = {};
+          data.devices.forEach((device: any) => {
+            newStatus[device.deviceKey] = {
+              connected: device.connected,
+              ahkRunning: device.ahkRunning,
+              lastSeen: device.lastSeen,
+              uptime: device.uptime,
+            };
+          });
+          setHeartbeatStatus(newStatus);
+
+          // Update devices' real connection status
+          setDevices((prev) =>
+            prev.map((device) => {
+              const deviceKey = `${device.serial}-${device.hostname}`;
+              const status = newStatus[deviceKey];
+              if (status) {
+                return {
+                  ...device,
+                  connected: status.connected,
+                  ahkEnabled: status.ahkRunning,
+                  lastChecked: new Date().toLocaleTimeString(),
+                  lastSeen: status.connected ? 'Now' : device.lastSeen,
+                };
+              }
+              return device;
+            })
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch device status:', error);
+    }
+  };
+
+  // Setup real-time heartbeat polling
+  useEffect(() => {
+    fetchDeviceStatus();
+    heartbeatIntervalRef.current = setInterval(fetchDeviceStatus, 5000);
+
+    return () => {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Send heartbeat from this device
+  const sendHeartbeat = async () => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      await fetch('/api/devices/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serial: networkInfo.hostname,
+          hostname: networkInfo.hostname,
+          localIp: networkInfo.localIp,
+          ahkRunning: false,
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to send heartbeat:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (networkInfo.hostname && networkInfo.hostname !== '') {
+      sendHeartbeat();
+      const heartbeatInterval = setInterval(sendHeartbeat, 10000);
+      return () => clearInterval(heartbeatInterval);
+    }
+  }, [networkInfo.hostname, networkInfo.localIp]);
 
   const filtered = useMemo(() => {
     return devices.filter((d) =>
@@ -187,34 +244,34 @@ export default function Home() {
 
   const enabledCount = devices.filter((x) => x.enabled).length;
   const disabledCount = devices.length - enabledCount;
-  const ahkDisabledCount = devices.filter((x) => !x.ahkEnabled).length;
+  const connectedCount = devices.filter((x) => x.connected).length;
 
-  const verifyConnection = (id: number) => {
-    setDevices((prev) =>
-      prev.map((d) => {
-        if (d.id !== id) return d;
-        const connected = d.wifi === 'Sailors-Company-Devices-Only' && d.ip !== '' && d.bssid !== '';
-        return {
-          ...d,
-          connected,
-          lastChecked: new Date().toLocaleTimeString(),
-        };
-      })
-    );
-  };
+  const verifyConnection = async (id: number) => {
+    const device = devices.find((d) => d.id === id);
+    if (!device) return;
 
-  const toggleAhkOnly = (id: number) => {
-    setDevices((prev) =>
-      prev.map((d) =>
-        d.id === id
-          ? {
-              ...d,
-              ahkEnabled: !d.ahkEnabled,
-              lastChecked: new Date().toLocaleTimeString(),
-            }
-          : d
-      )
-    );
+    const deviceKey = `${device.serial}-${device.hostname}`;
+    try {
+      const response = await fetch(`/api/devices/heartbeat?serial=${device.serial}&hostname=${device.hostname}`);
+      if (response.ok) {
+        const status = await response.json();
+        setDevices((prev) =>
+          prev.map((d) =>
+            d.id === id
+              ? {
+                  ...d,
+                  connected: status.connected,
+                  ahkEnabled: status.ahkRunning,
+                  lastChecked: new Date().toLocaleTimeString(),
+                }
+              : d
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Verification failed:', error);
+      alert('Failed to verify connection');
+    }
   };
 
   const addDevice = () => {
@@ -277,8 +334,8 @@ export default function Home() {
     }));
 
     try {
-      const response = await fetch('https://api.ipify.org?format=json');
-      const data = await response.json();
+      const res = await fetch('https://api.ipify.org?format=json');
+      const data = await res.json();
       if (data?.ip) {
         setNetworkInfo((prev) => ({ ...prev, publicIp: data.ip }));
       }
@@ -291,56 +348,6 @@ export default function Home() {
     autoFillNetworkInfo();
   }, []);
 
-  const detectCurrentDevice = async () => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      let localIp = '';
-      let publicIp = '';
-
-      const pc = new RTCPeerConnection({ iceServers: [] });
-      const candidates: string[] = [];
-
-      pc.onicecandidate = (ice) => {
-        if (!ice || !ice.candidate) return;
-        const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3})/;
-        const ipAddress = ipRegex.exec(ice.candidate.candidate);
-        if (ipAddress) {
-          candidates.push(ipAddress[1]);
-        }
-      };
-
-      await pc.createDataChannel('');
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      pc.close();
-
-      if (candidates.length > 0) {
-        localIp = candidates[0];
-      }
-
-      const connectionType = (navigator as any).connection?.effectiveType || 'unknown';
-      const downlink = (navigator as any).connection?.downlink || 'N/A';
-
-      setForm((prev) => ({
-        ...prev,
-        ip: localIp || prev.ip,
-        wifi: 'Sailors-Company-Devices-Only',
-        wifiSecurity: 'WPA2-Enterprise',
-        bssid: 'AA:BB:11:22',
-        channel: '161',
-      }));
-
-      alert(
-        `Auto-detected:\n\nLocal IP: ${localIp || 'N/A'}\nConnection: ${connectionType}\nSpeed: ${downlink} Mbps\n\nWiFi SSID updated to default. Please verify your actual SSID.`
-      );
-    } catch (error) {
-      console.error('Detection failed:', error);
-      alert('Could not auto-detect network info. Please fill manually.');
-    }  };
-
   return (
     <div className='p-6 bg-slate-50 min-h-screen'>
       <div className='max-w-7xl mx-auto space-y-6'>
@@ -348,7 +355,7 @@ export default function Home() {
           <div>
             <h1 className='text-3xl font-bold'>RH Control Center</h1>
             <div className='text-xs text-emerald-600 font-medium'>Vercel Ready • Free Hosting Ready</div>
-            <p className='text-slate-500'>Manage AutoHotkey status across registered laptops</p>
+            <p className='text-slate-500'>Real-time AutoHotkey status across registered laptops</p>
           </div>
 
           <div className='flex items-center gap-2 bg-white rounded-2xl px-3 py-2 shadow'>
@@ -365,25 +372,26 @@ export default function Home() {
         <div className='grid md:grid-cols-4 gap-4'>
           <Card className='rounded-2xl'>
             <CardContent className='p-5'>
-              <div className='text-sm text-slate-500'>Connection</div>
+              <div className='text-sm text-slate-500'>Your Connection</div>
               <div className='text-2xl font-semibold'>{networkInfo.connectionType}</div>
+              <div className='text-xs text-slate-500 mt-1'>{networkInfo.isOnline ? '🟢 Online' : '🔴 Offline'}</div>
             </CardContent>
           </Card>
           <Card className='rounded-2xl'>
             <CardContent className='p-5'>
-              <div className='text-sm text-slate-500'>Hostname</div>
-              <div className='text-2xl font-semibold'>{networkInfo.hostname || 'Unknown'}</div>
+              <div className='text-sm text-slate-500'>Your Hostname</div>
+              <div className='text-2xl font-semibold truncate'>{networkInfo.hostname || 'Unknown'}</div>
             </CardContent>
           </Card>
           <Card className='rounded-2xl'>
             <CardContent className='p-5'>
-              <div className='text-sm text-slate-500'>Local IP</div>
+              <div className='text-sm text-slate-500'>Your Local IP</div>
               <div className='text-2xl font-semibold'>{networkInfo.localIp}</div>
             </CardContent>
           </Card>
           <Card className='rounded-2xl'>
             <CardContent className='p-5'>
-              <div className='text-sm text-slate-500'>Public IP</div>
+              <div className='text-sm text-slate-500'>Your Public IP</div>
               <div className='text-2xl font-semibold'>{networkInfo.publicIp}</div>
             </CardContent>
           </Card>
@@ -391,33 +399,8 @@ export default function Home() {
 
         <Card className='rounded-2xl'>
           <CardContent className='p-5 space-y-3'>
-            <div className='text-xl font-semibold'>WiFi Control Setup</div>
-            <div className='grid md:grid-cols-2 gap-3 text-sm text-slate-600'>
-              <div>
-                <div className='font-medium'>SSID</div>
-                Sailors-Company-Devices-Only
-              </div>
-              <div>
-                <div className='font-medium'>Security</div>
-                WPA2-Enterprise / EAP-TLS
-              </div>
-              <div>
-                <div className='font-medium'>IP Assignment</div>
-                Automatic (DHCP)
-              </div>
-              <div>
-                <div className='font-medium'>Network band</div>
-                5 GHz, channel 161
-              </div>
-            </div>
-            <p className='text-sm text-slate-500'>Gunakan konfigurasi ini sebagai acuan saat menambahkan perangkat ke jaringan. Status AutoHotkey akan tampil bila perangkat terhubung dengan agen pemantau yang mendukung pembacaan proses. Browser dapat mendeteksi IP lokal dan tipe koneksi perangkat Anda saat ini.</p>
-          </CardContent>
-        </Card>
-
-        <Card className='rounded-2xl'>
-          <CardContent className='p-5 space-y-3'>
             <div className='text-xl font-semibold'>Setup Laptop</div>
-            <div className='text-sm text-slate-500'>Form akan otomatis terisi dari koneksi jaringan saat ini jika tersedia.</div>
+            <div className='text-sm text-slate-500'>Form akan otomatis terisi dari koneksi jaringan saat ini jika tersedia. Gunakan Serial Number BIOS dan Hostname sebagai identitas unik perangkat.</div>
             <div className='grid md:grid-cols-5 gap-3'>
               <Input placeholder='Laptop Name' value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               <Input placeholder='Model' value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
@@ -438,6 +421,7 @@ export default function Home() {
               <Button variant='outline' onClick={() => {
                 if (typeof window !== 'undefined') {
                   navigator.clipboard.writeText(JSON.stringify(devices, null, 2));
+                  alert('Backup copied to clipboard');
                 }
               }}>
                 Copy Backup
@@ -451,8 +435,22 @@ export default function Home() {
         <div className='grid md:grid-cols-4 gap-4'>
           <Card className='rounded-2xl'>
             <CardContent className='p-5'>
-              <div className='text-sm text-slate-500'>Total Devices (Saved Local)</div>
+              <div className='text-sm text-slate-500'>Total Devices</div>
               <div className='text-3xl font-bold'>{devices.length}</div>
+            </CardContent>
+          </Card>
+
+          <Card className='rounded-2xl'>
+            <CardContent className='p-5'>
+              <div className='text-sm text-slate-500'>Connected (Real-time)</div>
+              <div className='text-3xl font-bold text-green-600'>{connectedCount}</div>
+            </CardContent>
+          </Card>
+
+          <Card className='rounded-2xl'>
+            <CardContent className='p-5'>
+              <div className='text-sm text-slate-500'>Disconnected</div>
+              <div className='text-3xl font-bold text-red-600'>{disabledCount}</div>
             </CardContent>
           </Card>
 
@@ -462,98 +460,91 @@ export default function Home() {
               <div className='text-3xl font-bold'>{enabledCount}</div>
             </CardContent>
           </Card>
-
-          <Card className='rounded-2xl'>
-            <CardContent className='p-5'>
-              <div className='text-sm text-slate-500'>Disabled</div>
-              <div className='text-3xl font-bold'>{disabledCount}</div>
-            </CardContent>
-          </Card>
-
-          <Card className='rounded-2xl'>
-            <CardContent className='p-5'>
-              <div className='text-sm text-slate-500'>AHK Disabled</div>
-              <div className='text-3xl font-bold'>{ahkDisabledCount}</div>
-            </CardContent>
-          </Card>
         </div>
 
         <div className='grid gap-4'>
           {filtered.length === 0 ? (
             <Card className='rounded-2xl'>
               <CardContent className='p-6 text-center text-slate-500'>
-                No devices found.
+                No devices found. Add one using the Setup Laptop form above.
               </CardContent>
             </Card>
           ) : (
-            filtered.map((d: any) => (
-              <Card key={d.id} className='rounded-2xl shadow-sm'>
-                <CardContent className='p-5'>
-                  <div className='grid md:grid-cols-5 gap-4 items-center'>
-                    <div>
-                      <div className='flex items-center gap-2 font-semibold'>
-                        <Icon>💻</Icon>
-                        {d.name}
-                      </div>
-                      <div className='text-sm text-slate-500'>{d.model}</div>
-                    </div>
+            filtered.map((d: any) => {
+              const deviceKey = `${d.serial}-${d.hostname}`;
+              const status = heartbeatStatus[deviceKey];
+              const isConnected = status?.connected ?? d.connected;
+              const ahkRunning = status?.ahkRunning ?? d.ahkEnabled;
 
-                    <div>
-                      <div className='text-xs text-slate-500'>Serial Number</div>
-                      <div className='font-medium'>{d.serial}</div>
-                    </div>
-
-                    <div>
-                      <div className='text-xs text-slate-500'>Network</div>
-                      <div className='font-medium flex flex-col gap-1'>
-                        <div className='flex items-center gap-1'>
-                          <Icon>📶</Icon>
-                          {d.wifi}
+              return (
+                <Card key={d.id} className={`rounded-2xl shadow-sm ${isConnected ? 'border-l-4 border-green-500' : 'border-l-4 border-red-500'}`}>
+                  <CardContent className='p-5'>
+                    <div className='grid md:grid-cols-5 gap-4 items-center'>
+                      <div>
+                        <div className='flex items-center gap-2 font-semibold'>
+                          <Icon>{isConnected ? '🟢' : '🔴'}</Icon>
+                          {d.name}
                         </div>
-                        <div className='text-xs text-slate-500'>BSSID: {d.bssid}</div>
-                        <div className='text-xs text-slate-500'>Local IP: {d.ip}</div>
-                        {d.publicIp ? <div className='text-xs text-slate-500'>Public IP: {d.publicIp}</div> : null}
+                        <div className='text-sm text-slate-500'>{d.model}</div>
+                        <div className='text-xs font-mono text-slate-400'>{d.serial}</div>
+                      </div>
+
+                      <div>
+                        <div className='text-xs text-slate-500'>Status</div>
+                        <div className={`font-bold ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
+                          {isConnected ? 'Connected ✓' : 'Disconnected ✗'}
+                        </div>
+                        <div className='text-xs text-slate-500'>{d.lastChecked}</div>
+                      </div>
+
+                      <div>
+                        <div className='text-xs text-slate-500'>AutoHotkey</div>
+                        <div className={`font-bold ${ahkRunning ? 'text-green-600' : 'text-red-600'}`}>
+                          {ahkRunning ? 'Running ✓' : 'Stopped ✗'}
+                        </div>
+                        <div className='text-xs text-slate-500'>Network Info</div>
+                      </div>
+
+                      <div>
+                        <div className='text-xs text-slate-500'>Network</div>
+                        <div className='font-medium flex flex-col gap-1'>
+                          <div className='flex items-center gap-1 truncate'>
+                            <Icon>📶</Icon>
+                            <span className='truncate'>{d.wifi}</span>
+                          </div>
+                          <div className='text-xs text-slate-500'>IP: {d.ip}</div>
+                          <div className='text-xs text-slate-500'>MAC: {d.mac || 'N/A'}</div>
+                        </div>
+                      </div>
+
+                      <div className='flex flex-wrap items-center justify-end gap-2'>
+                        <div className='flex items-center gap-2'>
+                          <Icon>{d.enabled ? '🛡️' : '⚠️'}</Icon>
+                          <span className='text-sm'>
+                            {d.enabled ? 'Enabled' : 'Disabled'}
+                          </span>
+                          <Switch
+                            checked={d.enabled}
+                            onCheckedChange={() => toggle(d.id)}
+                          />
+                        </div>
+                        <Button size='sm' variant='outline' onClick={() => verifyConnection(d.id)}>
+                          Verify
+                        </Button>
+                        <Button size='sm' variant='destructive' onClick={() => removeDevice(d.id)}>
+                          Delete
+                        </Button>
                       </div>
                     </div>
-
-                    <div>
-                      <div className='text-xs text-slate-500'>AHK Connection</div>
-                      <div className='font-medium'>{d.connected ? 'Connected' : 'Disconnected'}</div>
-                      <div className='text-xs text-slate-500'>Last check: {d.lastChecked}</div>
-                    </div>
-
-                    <div>
-                      <div className='text-xs text-slate-500'>AHK Control</div>
-                      <div className='font-medium'>{d.ahkEnabled ? 'Running' : 'Disabled'}</div>
-                      <div className='text-xs text-slate-500'>Only AHK is toggled here.</div>
-                    </div>
-
-                    <div className='flex flex-wrap items-center justify-end gap-3'>
-                      <div className='flex items-center gap-2'>
-                        <Icon>🛡️</Icon>
-                        <span className='text-sm'>
-                          {d.enabled ? 'Enabled' : 'Disabled'}
-                        </span>
-                        <Switch
-                          checked={d.enabled}
-                          onCheckedChange={() => toggle(d.id)}
-                        />
-                      </div>
-                      <Button variant='outline' onClick={() => verifyConnection(d.id)}>
-                        Verify Connection
-                      </Button>
-                      <Button variant='outline' onClick={() => toggleAhkOnly(d.id)}>
-                        {d.ahkEnabled ? 'Disable AHK' : 'Enable AHK'}
-                      </Button>
-                      <Button variant='destructive' onClick={() => removeDevice(d.id)}>
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
+        </div>
+
+        <div className='text-center text-xs text-slate-500 py-4'>
+          Status updates every 5 seconds | Last update: {new Date().toLocaleTimeString()}
         </div>
       </div>
     </div>
