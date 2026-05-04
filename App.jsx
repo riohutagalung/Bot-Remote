@@ -18,6 +18,45 @@ const blankForm = {
   user: '',
 };
 
+const defaultNetworkState = {
+  connectionType: '',
+  localIp: '',
+  hostname: '',
+  publicIp: '',
+  isOnline: null,
+};
+
+async function getLocalIps() {
+  if (typeof window === 'undefined' || !window.RTCPeerConnection) {
+    return [];
+  }
+
+  return new Promise((resolve) => {
+    const ips = new Set();
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    });
+
+    pc.createDataChannel('');
+    pc.createOffer().then((offer) => pc.setLocalDescription(offer)).catch(() => {});
+
+    pc.onicecandidate = (event) => {
+      if (!event.candidate) {
+        pc.close();
+        resolve(Array.from(ips));
+        return;
+      }
+
+      const candidate = event.candidate.candidate;
+      const ipRegex = /([0-9]{1,3}(?:\.[0-9]{1,3}){3})/g;
+      let match;
+      while ((match = ipRegex.exec(candidate))) {
+        ips.add(match[1]);
+      }
+    };
+  });
+}
+
 function Icon({ children }) {
   return (
     <span className='inline-flex items-center justify-center w-5 h-5 text-sm'>
@@ -29,6 +68,7 @@ function Icon({ children }) {
 export default function App() {
   const [q, setQ] = useState('');
   const [form, setForm] = useState(blankForm);
+  const [networkInfo, setNetworkInfo] = useState(defaultNetworkState);
   const [devices, setDevices] = useState(() => {
     if (typeof window === 'undefined') {
       return [
@@ -185,6 +225,65 @@ export default function App() {
     setForm(blankForm);
   };
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const connection =
+      navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const connectionType = connection?.type
+      ? connection.type === 'wifi'
+        ? 'Wi-Fi'
+        : connection.type
+      : connection?.effectiveType
+      ? `Network (${connection.effectiveType})`
+      : 'Connected network';
+    const hostname = window.location.hostname || '';
+    const query = new URLSearchParams(window.location.search);
+    const urlWifi = query.get('ssid') || query.get('wifi');
+    const urlHost = query.get('hostname');
+    const urlIp = query.get('ip');
+    const urlName = query.get('name');
+    const defaultWifi = urlWifi || connectionType;
+
+    getLocalIps().then((ips) => {
+      const localIp =
+        urlIp ||
+        ips.find((ip) => !ip.startsWith('169.') && !ip.startsWith('127.') && !ip.startsWith('0.')) ||
+        ips[0] ||
+        '';
+
+      setNetworkInfo({
+        connectionType,
+        hostname: urlHost || hostname,
+        localIp,
+        publicIp: '',
+        isOnline: navigator.onLine,
+      });
+
+      setForm((prev) => ({
+        ...prev,
+        wifi: prev.wifi || defaultWifi,
+        hostname: prev.hostname || urlHost || hostname,
+        ip: prev.ip || localIp,
+        name:
+          prev.name ||
+          urlName ||
+          (hostname ? `Laptop ${hostname}` : ''),
+      }));
+    });
+
+    fetch('https://api.ipify.org?format=json')
+      .then((response) => response.json())
+      .then((data) => {
+        if (data?.ip) {
+          setNetworkInfo((prev) => ({ ...prev, publicIp: data.ip }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const copyBackup = async () => {
     if (typeof window !== 'undefined' && window.navigator?.clipboard) {
       await window.navigator.clipboard.writeText(JSON.stringify(devices, null, 2));
@@ -197,7 +296,7 @@ export default function App() {
       <div className='max-w-7xl mx-auto space-y-6'>
         <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-4'>
           <div>
-            <h1 className='text-3xl font-bold'>RH House Control Center</h1>
+            <h1 className='text-3xl font-bold'>RH Control Center</h1>
             <div className='text-xs text-emerald-600 font-medium'>Vercel Ready • Free Hosting Ready</div>
             <p className='text-slate-500'>Manage AutoHotkey status across registered laptops</p>
           </div>
@@ -213,9 +312,37 @@ export default function App() {
           </div>
         </div>
 
+        <div className='grid md:grid-cols-4 gap-3'>
+          <Card className='rounded-2xl'>
+            <CardContent className='p-4'>
+              <div className='text-xs text-slate-500'>Connection</div>
+              <div className='font-semibold'>{networkInfo.connectionType || 'Detecting...'}</div>
+            </CardContent>
+          </Card>
+          <Card className='rounded-2xl'>
+            <CardContent className='p-4'>
+              <div className='text-xs text-slate-500'>Hostname</div>
+              <div className='font-semibold'>{networkInfo.hostname || 'Unknown'}</div>
+            </CardContent>
+          </Card>
+          <Card className='rounded-2xl'>
+            <CardContent className='p-4'>
+              <div className='text-xs text-slate-500'>Local IP</div>
+              <div className='font-semibold'>{networkInfo.localIp || 'Unknown'}</div>
+            </CardContent>
+          </Card>
+          <Card className='rounded-2xl'>
+            <CardContent className='p-4'>
+              <div className='text-xs text-slate-500'>Public IP</div>
+              <div className='font-semibold'>{networkInfo.publicIp || 'Detecting...'}</div>
+            </CardContent>
+          </Card>
+        </div>
+
         <Card className='rounded-2xl'>
           <CardContent className='p-5 space-y-3'>
-            <div className='text-xl font-semibold'>Add / Setup Laptop</div>
+            <div className='text-xl font-semibold'>Setup Laptop</div>
+            <div className='text-sm text-slate-500'>Fields are auto-filled from the current connection when available.</div>
             <div className='grid md:grid-cols-4 gap-3'>
               <Input
                 placeholder='Laptop Name'
