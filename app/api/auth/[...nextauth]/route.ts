@@ -10,22 +10,31 @@ const users = [
     name: 'Rio Hutagalung',
     email: 'rio.hutagalung2@gmail.com',
     username: 'hutagalungrioo',
-    password: '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj8nJZkW5HGm', // hashed 'Taikbabi182#'
+    password: '$2b$12$JjEPM03p2QNOcNeIl/Sx9Ov9S4ciqa9/UXxSgHlNfeIABUAJLc0ni', // hashed 'Taikbabi182#'
     twoFactorEnabled: true,
   },
 ];
 
 const verificationTokens = new Map<string, { token: string; expires: Date }>();
-
+const emailConfigured = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: process.env.EMAIL_USER ?? '',
+    pass: process.env.EMAIL_PASS ?? '',
   },
 });
 
-export const GET = NextAuth({
+if (!process.env.NEXTAUTH_URL) {
+  if (process.env.VERCEL_URL) {
+    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
+  } else if (process.env.NODE_ENV === 'development') {
+    process.env.NEXTAUTH_URL = 'http://localhost:3000';
+  }
+}
+
+const authOptions = {
+  trustHost: true,
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -39,64 +48,61 @@ export const GET = NextAuth({
           return null;
         }
 
-        // Find user
-        const user = users.find(u => u.username === credentials.username);
+        const user = users.find((u) => u.username === credentials.username);
         if (!user) {
           return null;
         }
 
-        // Verify password
         const isValidPassword = await bcrypt.compare(credentials.password, user.password);
         if (!isValidPassword) {
           return null;
         }
 
-        // Check if 2FA is enabled
         if (user.twoFactorEnabled) {
           if (!credentials.code) {
-            // Generate and send 2FA code
             const code = Math.floor(100000 + Math.random() * 900000).toString();
-            const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
+            const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
             verificationTokens.set(user.email, { token: code, expires: expiresAt });
 
-            // Send email
-            try {
-              await transporter.sendMail({
-                from: process.env.EMAIL_USER,
-                to: user.email,
-                subject: 'RH Control Center - 2FA Code',
-                html: `
-                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2>RH Control Center Login</h2>
-                    <p>Your 2FA code is: <strong>${code}</strong></p>
-                    <p>This code will expire in 10 minutes.</p>
-                    <p>If you didn't request this, please ignore this email.</p>
-                  </div>
-                `,
-              });
-
-              // Also send to backup email
-              if (process.env.BACKUP_EMAIL) {
+            if (emailConfigured) {
+              try {
                 await transporter.sendMail({
                   from: process.env.EMAIL_USER,
-                  to: process.env.BACKUP_EMAIL,
-                  subject: 'RH Control Center - 2FA Code (Backup)',
+                  to: user.email,
+                  subject: 'RH Control Center - 2FA Code',
                   html: `
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                      <h2>RH Control Center Login (Backup)</h2>
-                      <p>2FA code sent to ${user.email}: <strong>${code}</strong></p>
+                      <h2>RH Control Center Login</h2>
+                      <p>Your 2FA code is: <strong>${code}</strong></p>
                       <p>This code will expire in 10 minutes.</p>
+                      <p>If you didn't request this, please ignore this email.</p>
                     </div>
                   `,
                 });
+
+                if (process.env.BACKUP_EMAIL) {
+                  await transporter.sendMail({
+                    from: process.env.EMAIL_USER,
+                    to: process.env.BACKUP_EMAIL,
+                    subject: 'RH Control Center - 2FA Code (Backup)',
+                    html: `
+                      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <h2>RH Control Center Login (Backup)</h2>
+                        <p>2FA code sent to ${user.email}: <strong>${code}</strong></p>
+                        <p>This code will expire in 10 minutes.</p>
+                      </div>
+                    `,
+                  });
+                }
+              } catch (error) {
+                console.error('Failed to send 2FA email:', error);
+                return null;
               }
-            } catch (error) {
-              console.error('Failed to send 2FA email:', error);
-              return null;
+            } else {
+              console.warn('EMAIL_USER or EMAIL_PASS is not configured. 2FA code will be logged to the server console.');
+              console.info(`2FA code for ${user.email}: ${code}`);
             }
 
-            // Return user with pending 2FA
             return {
               id: user.id,
               email: user.email,
@@ -104,16 +110,13 @@ export const GET = NextAuth({
               username: user.username,
               twoFactorPending: true,
             };
-          } else {
-            // Verify 2FA code
-            const tokenData = verificationTokens.get(user.email);
-            if (!tokenData || tokenData.token !== credentials.code || tokenData.expires < new Date()) {
-              return null;
-            }
-
-            // Delete used token
-            verificationTokens.delete(user.email);
           }
+
+          const tokenData = verificationTokens.get(user.email);
+          if (!tokenData || tokenData.token !== credentials.code || tokenData.expires < new Date()) {
+            return null;
+          }
+          verificationTokens.delete(user.email);
         }
 
         return {
@@ -126,8 +129,8 @@ export const GET = NextAuth({
     }),
   ],
   session: {
-    strategy: 'jwt',
-    maxAge: 24 * 60 * 60, // 24 hours
+    strategy: 'jwt' as const,
+    maxAge: 24 * 60 * 60,
   },
   callbacks: {
     async jwt({ token, user }) {
@@ -149,6 +152,9 @@ export const GET = NextAuth({
   pages: {
     signIn: '/auth/signin',
   },
-});
+  secret: process.env.NEXTAUTH_SECRET ?? 'dev-secret',
+  debug: process.env.NODE_ENV !== 'production',
+};
 
-export const POST = GET;
+const handler = NextAuth(authOptions);
+export { handler as GET, handler as POST };
