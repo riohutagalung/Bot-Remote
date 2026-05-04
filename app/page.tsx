@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { useSession, signOut } from 'next-auth/react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -113,6 +114,32 @@ export default function Home() {
     isOnline: null as boolean | null,
   });
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { data: session, status } = useSession();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      window.location.href = '/auth/signin';
+    }
+  }, [status]);
+
+  // Show loading while checking authentication
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900 mx-auto"></div>
+          <p className="mt-4 text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated
+  if (!session) {
+    return null;
+  }
 
   // Load devices from localStorage
   useEffect(() => {
@@ -356,16 +383,26 @@ export default function Home() {
             <h1 className='text-3xl font-bold'>RH Control Center</h1>
             <div className='text-xs text-emerald-600 font-medium'>Vercel Ready • Free Hosting Ready</div>
             <p className='text-slate-500'>Real-time AutoHotkey status across registered laptops</p>
+            <p className='text-xs text-slate-400'>Logged in as: {session?.user?.name}</p>
           </div>
 
-          <div className='flex items-center gap-2 bg-white rounded-2xl px-3 py-2 shadow'>
-            <Icon>🔍</Icon>
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder='Search device...'
-              className='border-0 shadow-none'
-            />
+          <div className='flex items-center gap-3'>
+            <div className='flex items-center gap-2 bg-white rounded-2xl px-3 py-2 shadow'>
+              <Icon>🔍</Icon>
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder='Search device...'
+                className='border-0 shadow-none'
+              />
+            </div>
+            <Button
+              variant='outline'
+              onClick={() => signOut({ callbackUrl: '/auth/signin' })}
+              className='bg-white'
+            >
+              Logout
+            </Button>
           </div>
         </div>
 
