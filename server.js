@@ -21,3 +21,4 @@ const server = app.listen(PORT, () => {
 });
 
 const wss = new WebSocketServer({ server });
+app.get("/ping", (_, res) => res.status(200).send("pong"));
