@@ -4,8 +4,8 @@ import { Search, Plus, Download, Upload, Trash2, Check, X, Copy, AlertCircle, Lo
 const STORAGE_KEY = 'rh-house-devices';
 const AUTH_KEY = 'rh-auth-session';
 const PASSWORD = import.meta.env.VITE_PASSWORD || 'Taikbabi182#';
-const BACKEND_HTTP = import.meta.env.VITE_BACKEND_HTTP || 'http://localhost:3001';
-const BACKEND_WS = import.meta.env.VITE_BACKEND_WS || 'ws://localhost:3003';
+const BACKEND_HTTP = "https://bot-remote-production.up.railway.app";
+const BACKEND_WS = "wss://bot-remote-production.up.railway.app";
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
