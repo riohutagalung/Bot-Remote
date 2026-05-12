@@ -3,7 +3,7 @@ import { exec, execSync } from 'child_process';
 import os from 'os';
 import path from 'path';
 
-const SERVER_URL = process.env.SERVER_URL || 'ws://localhost:3003';
+const SERVER_URL = "wss://bot-remote-production.up.railway.app';
 const DEVICE_ID = process.argv[2] || `device-${Date.now()}`;
 
 function getSystemInfo() {
