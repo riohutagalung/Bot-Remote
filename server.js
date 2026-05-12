@@ -1,4 +1,3 @@
-js
    import express from "express";
    import { WebSocketServer } from "ws";
    import cors from "cors";
@@ -22,4 +21,3 @@ js
    const wss = new WebSocketServer({ server });
 
    // …lanjutkan kode lama kamu di bawah sini (devices, controllers, dsb)
-   
