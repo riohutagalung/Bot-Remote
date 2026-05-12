@@ -24,3 +24,17 @@ const server = app.listen(PORT, () => {
 
 // aktifkan WebSocket
 const wss = new WebSocketServer({ server });
+// ----- API ROUTES FOR FRONTEND -----
+app.get("/api/devices", (req, res) => {
+  // misal: kirim list kosong dulu, nanti bisa diganti kirim devices sebenarnya
+  res.json([]);
+});
+
+app.post("/api/command", (req, res) => {
+  const { deviceId, command } = req.body || {};
+  if (!deviceId || !command) {
+    return res.status(400).json({ error: "Device ID and command required" });
+  }
+  // sementara langsung sukses
+  res.json({ success: true, deviceId, command });
+});
