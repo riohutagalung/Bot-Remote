@@ -1,23 +1,23 @@
-   import express from "express";
-   import { WebSocketServer } from "ws";
-   import cors from "cors";
-   import path from "path";
-   import { fileURLToPath } from "url";
+import express from "express";
+import { WebSocketServer } from "ws";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
-   const __filename = fileURLToPath(import.meta.url);
-   const __dirname = path.dirname(__filename);
-   const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const app = express();
 
-   app.use(cors());
-   app.use(express.json());
-   const PORT = process.env.PORT;
+app.use(cors());
+app.use(express.json());
+const PORT = process.env.PORT || 8080;
 
-   app.get("/", (_, res) => res.send("WebSocket backend online"));
+app.get("/", (_, res) => {
+  res.send("WebSocket backend online");
+});
 
-   const server = app.listen(PORT, () => {
-     console.log(`HTTP + WS server running on port ${PORT}`);
-   });
+const server = app.listen(PORT, () => {
+  console.log(`HTTP + WS server running on port ${PORT}`);
+});
 
-   const wss = new WebSocketServer({ server });
-
-   // …lanjutkan kode lama kamu di bawah sini (devices, controllers, dsb)
+const wss = new WebSocketServer({ server });
