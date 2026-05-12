@@ -10,15 +10,17 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
 const PORT = process.env.PORT || 8080;
 
-app.get("/", (_, res) => {
-  res.send("WebSocket backend online");
-});
+// endpoint untuk test backend
+app.get("/", (_, res) => res.send("WebSocket backend online"));
+app.get("/ping", (_, res) => res.status(200).send("pong"));
 
+// jalankan server HTTP dan WebSocket di port yang sama
 const server = app.listen(PORT, () => {
   console.log(`HTTP + WS server running on port ${PORT}`);
 });
 
+// aktifkan WebSocket
 const wss = new WebSocketServer({ server });
-app.get("/ping", (_, res) => res.status(200).send("pong"));
