@@ -14,7 +14,8 @@
   "author": "Your Name",
   "license": "MIT",
   "pkg": {
-  "scripts": "client.js",
-  "targets": [ "node18-win-x64" ],
-  "outputPath": "dist"
+    "scripts": "client.js",
+    "targets": ["node18-win-x64"],
+    "outputPath": "dist"
+  }
 }
