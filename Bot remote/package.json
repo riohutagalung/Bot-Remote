@@ -11,10 +11,8 @@
   "dependencies": {
     "ws": "^8.16.0"
   },
-  "author": "Your Name",
-  "license": "MIT",
   "pkg": {
-    "scripts": "client.js",
+    "scripts": "client.cjs",
     "targets": ["node18-win-x64"],
     "outputPath": "dist"
   }
