@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Remote AutoHotkey controller client",
   "type": "module",
-  "main": "client.js",
-  "bin": "client.js",
+  "main": "client.cjs",
+  "bin": "client.cjs",
   "scripts": {
     "start": "node client.js"
   },
