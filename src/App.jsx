@@ -1,6 +1,3 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Search, Plus, Download, Upload, Trash2, Check, X, Copy, AlertCircle, LogOut, Wifi, WifiOff, Eye, EyeOff } from 'lucide-react';
-
 const STORAGE_KEY = 'rh-house-devices';
 const AUTH_KEY = 'rh-auth-session';
 const PASSWORD = import.meta.env.VITE_PASSWORD || 'Taikbabi182#';
