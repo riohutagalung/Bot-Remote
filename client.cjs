@@ -70,9 +70,22 @@ function getMACAddress() {
 
 let statusAhkSaatIni = false;
 
-// =======================================================
-// PERBAIKAN LOGIKA UTAMA EKSEKUSI PERINTAH WINDOWS
-// =======================================================
+// ==========================================================
+// FUNGSIONALITAS BARU: CEK REAL-TIME APAKAH AHK SEDANG AKTIF DI WINDOWS
+// ==========================================================
+function periksaApakahAhkJalan() {
+  return new Promise((resolve) => {
+    if (os.platform() !== "win32") return resolve(false);
+    
+    // Periksa daftar aplikasi aktif di Windows Task Manager yang bernama AutoHotkey.exe
+    exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, stdout) => {
+      if (err) return resolve(false);
+      const sedangJalan = stdout.toLowerCase().includes("autohotkey.exe");
+      resolve(sedangJalan);
+    });
+  });
+}
+
 function controlAutoHotkey(action) {
   return new Promise((resolve) => {
     if (os.platform() !== "win32") {
@@ -82,24 +95,17 @@ function controlAutoHotkey(action) {
 
     let command;
     if (action === "start") {
-      // Menggunakan process.cwd() agar aman saat dicompile jadi exe (mencari file di folder luar, bukan di internal virtual pkg)
       const scriptPath = path.join(process.cwd(), "script.ahk");
       command = `"C:\\Program Files\\AutoHotkey\\AutoHotkey.exe" "${scriptPath}"`;
     } else if (action === "stop") {
-      // Ditambahkan /f (force) dan /t (tree) agar mematikan sub-proses AHK secara tuntas
+      // Mematikan paksa KHUSUS aplikasi AutoHotkey saja, dijamin aman bagi aplikasi lain
       command = "taskkill /f /t /im AutoHotkey.exe || exit 0";
     } else {
       return resolve();
     }
 
-    console.log(`[Executing Shell Command]: ${command}`);
-
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`[Exec Error]: ${error.message}`);
-      }
-      resolve();
-    });
+    console.log(`[Menjalankan Perintah Windows]: ${command}`);
+    exec(command, () => resolve());
   });
 }
 
@@ -107,14 +113,17 @@ function connectToServer() {
   const ws = new WebSocket(SERVER_URL);
   let intervalPingTelemetri;
 
-  const kirimSinyalTelemetri = () => {
+  const kirimSinyalTelemetri = async () => {
     if (ws.readyState === WebSocket.OPEN) {
+      // Selalu cek kondisi aktual Windows sebelum lapor ke server Railway & Vercel
+      statusAhkSaatIni = await periksaApakahAhkJalan();
+
       const info = getSystemInfo();
       const cleanId = info.serial.replace(/[^\w-]/g, "_");
 
       const payload = {
         id: cleanId,
-        ahkEnabled: statusAhkSaatIni,
+        ahkEnabled: statusAhkSaatIni, // Data ini sekarang jujur berdasarkan Task Manager Windows
         hostname: info.hostname,
         model: `${info.platform} (${info.arch})`,
         wifi: info.wifi,
@@ -129,7 +138,8 @@ function connectToServer() {
   ws.on("open", () => {
     console.log("✔ Connected to remote server safely");
     kirimSinyalTelemetri();
-    intervalPingTelemetri = setInterval(kirimSinyalTelemetri, 10000); 
+    // Dipercepat pengecekannya menjadi setiap 3 detik sekali agar Web Vercel super responsif mengikuti F3/F8 kamu
+    intervalPingTelemetri = setInterval(kirimSinyalTelemetri, 3000); 
   });
 
   ws.on("message", (message) => {
@@ -137,13 +147,12 @@ function connectToServer() {
       const data = JSON.parse(message.toString());
 
       if (data && data.type === "execute_command" && data.action) {
-        console.log("Menerima instruksi aksi:", data.action);
+        console.log("Menerima instruksi aksi dari Web:", data.action);
         const targetAksi = data.action === "start_ahk" ? "start" : "stop";
         
-        controlAutoHotkey(targetAksi).then(() => {
-          statusAhkSaatIni = (targetAksi === "start");
-          console.log(`Status Engine AHK sekarang: ${statusAhkSaatIni ? "NYALA" : "MATI"}`);
-          kirimSinyalTelemetri(); 
+        controlAutoHotkey(targetAksi).then(async () => {
+          await new Promise(r => setTimeout(r, 500)); // beri jeda sesaat agar proses Windows berubah dulu
+          await kirimSinyalTelemetri(); // Langsung paksa kirim status segar ke web
         });
       }
     } catch (err) {
@@ -162,5 +171,5 @@ function connectToServer() {
   });
 }
 
-console.log("Starting remote client...");
+console.log("Starting remote client with Task-Watcher Engine...");
 connectToServer();
