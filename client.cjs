@@ -26,9 +26,7 @@ function getSerialNumber() {
       return match && match[1] && match[1] !== "To" ? match[1] : "UNKNOWN_SERIAL";
     }
     return "NON_WINDOWS_DEV";
-  } catch {
-    return "UNKNOWN_SERIAL";
-  }
+  } catch { return "UNKNOWN_SERIAL"; }
 }
 
 function getWifiSSID() {
@@ -39,18 +37,14 @@ function getWifiSSID() {
       return match ? match[1].trim() : "-";
     }
     return "-";
-  } catch {
-    return "-";
-  }
+  } catch { return "-"; }
 }
 
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name]) {
-      if (iface.family === "IPv4" && !iface.internal) {
-        return iface.address;
-      }
+      if (iface.family === "IPv4" && !iface.internal) return iface.address;
     }
   }
   return "-";
@@ -60,9 +54,7 @@ function getMACAddress() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name]) {
-      if (iface.mac && iface.mac !== "00:00:00:00:00:00") {
-        return iface.mac;
-      }
+      if (iface.mac && iface.mac !== "00:00:00:00:00:00") return iface.mac;
     }
   }
   return "-";
@@ -71,58 +63,35 @@ function getMACAddress() {
 let statusAhkSaatIni = false;
 let wsGlobal = null;
 
-// ==========================================================
-// LOGIKABARU: SIMULASI PENCETAN TOMBOL KEYBOARD WINDOWS VIA POWERSHELL
-// ==========================================================
+// Mengirimkan ketukan tombol virtual (F3/F8) ke Windows - 100% BEBAS ADMINISTRATOR
 function kirimTombolVirtualKeWindows(tombol) {
   return new Promise((resolve) => {
     if (os.platform() !== "win32") return resolve();
-
-    // Menggunakan Powershell internal Windows untuk mengetuk F3 atau F8 secara gaib
-    const psCommand = `powershell -Command "$wsh = New-Object -ComObject Wscript.Shell; $wsh.SendKeys('{${tombol}}')"`;
-    
-    console.log(`[Remote Control] Mengirimkan ketukan tombol fisik: ${tombol}`);
-    exec(psCommand, () => resolve());
+    const cmd = `mshta vbscript:Execute("CreateObject(""Wscript.Shell"").SendKeys(""{${tombol}}""):close")`;
+    exec(cmd, () => resolve());
   });
 }
 
-// ==========================================================
-// LOGIKABARU: PEMANTAU TOMBOL F3 & F8 MANUAL DI LAPTOP
-// ==========================================================
-function aktifkanPemantauTombolFisik() {
+// PEMANTAU OTOMATIS: Mendeteksi apakah ikon AHK ada di Hidden Icon (Tasklist)
+function aktifkanPemantauProsesAhk() {
   if (os.platform() !== "win32") return;
 
-  // Script Powershell ringan untuk memantau status key secara background tanpa membebani CPU
-  const monitorScript = `
-  Add-Type -TypeDefinition @'
-  using System;
-  using System.Runtime.InteropServices;
-  public class Keyboard {
-      [DllImport("user32.dll")]
-      public static extern short GetAsyncKeyState(int vKey);
-  }
-'@
-  while ($true) {
-      if ([Keyboard]::GetAsyncKeyState(0x72) -band 0x8000) { Write-Output "F3_PRESSED"; Start-Sleep -Milliseconds 500 }
-      if ([Keyboard]::GetAsyncKeyState(0x77) -band 0x8000) { Write-Output "F8_PRESSED"; Start-Sleep -Milliseconds 500 }
-      Start-Sleep -Milliseconds 100
-  }
-  `;
-
-  const child = exec(`powershell -Command "${monitorScript}"`);
-
-  child.stdout.on("data", (data) => {
-    const msg = data.toString().trim();
-    if (msg.includes("F3_PRESSED")) {
-      console.log("[Fisik Terdeteksi] User menekan F3 di Keyboard -> Makro Aktif");
-      statusAhkSaatIni = true;
-      paksaKirimTelemetri();
-    } else if (msg.includes("F8_PRESSED")) {
-      console.log("[Fisik Terdeteksi] User menekan F8 di Keyboard -> Makro Berhenti");
-      statusAhkSaatIni = false;
-      paksaKirimTelemetri();
-    }
-  });
+  setInterval(() => {
+    // Mengecek apakah aplikasi AutoHotkey.exe sedang stand-by aktif di Windows
+    exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, stdout) => {
+      let sedangStandby = false;
+      if (!err && stdout.toLowerCase().includes("autohotkey.exe")) {
+        sedangStandby = true;
+      }
+      
+      // Jika statusnya berubah (misal baru diklik dua kali atau baru diclose manual)
+      if (statusAhkSaatIni !== sedangStandby) {
+        statusAhkSaatIni = sedangStandby;
+        console.log(`[Sync System] AutoHotkey Standby: ${statusAhkSaatIni ? "YA (🟢)" : "TIDAK (🔴)"}`);
+        paksaKirimTelemetri();
+      }
+    });
+  }, 3000); // Cek otomatis setiap 3 detik sekali
 }
 
 function paksaKirimTelemetri() {
@@ -132,7 +101,7 @@ function paksaKirimTelemetri() {
 
     const payload = {
       id: cleanId,
-      ahkEnabled: statusAhkSaatIni,
+      ahkEnabled: statusAhkSaatIni, // Sinyal stand-by masuk ke sini
       hostname: info.hostname,
       model: `${info.platform} (${info.arch})`,
       wifi: info.wifi,
@@ -157,38 +126,25 @@ function connectToServer() {
   ws.on("message", (message) => {
     try {
       const data = JSON.parse(message.toString());
-
       if (data && data.type === "execute_command" && data.action) {
-        console.log("Menerima instruksi kendali dari Web Dashboard:", data.action);
-        
+        // Menerima perintah klik On/Off dari Web Dashboard Vercel
         if (data.action === "start_ahk") {
-          kirimTombolVirtualKeWindows("F3").then(() => {
-            statusAhkSaatIni = true;
-            paksaKirimTelemetri();
-          });
+          kirimTombolVirtualKeWindows("F3");
         } else if (data.action === "stop_ahk") {
-          kirimTombolVirtualKeWindows("F8").then(() => {
-            statusAhkSaatIni = false;
-            paksaKirimTelemetri();
-          });
+          kirimTombolVirtualKeWindows("F8");
         }
       }
-    } catch (err) {
-      console.error("Gagal memproses parsing perintah backend:", err.message);
-    }
+    } catch (err) { console.error(err.message); }
   });
 
   ws.on("close", () => {
-    console.log("Disconnected, reconnecting in 5s...");
     clearInterval(intervalPingTelemetri);
     setTimeout(connectToServer, 5000);
   });
 
-  ws.on("error", (err) => {
-    console.error("WebSocket error:", err.message);
-  });
+  ws.on("error", () => {});
 }
 
-console.log("Starting remote client with Global Hotkey-Watcher Engine...");
-aktifkanPemantauTombolFisik();
+console.log("Starting remote client (Standard User Edition)...");
+aktifkanPemantauProsesAhk();
 connectToServer();
