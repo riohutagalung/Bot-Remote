@@ -10,18 +10,12 @@ app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// DATABASE UTAMA (In-Memory Simulation)
 let databasePerangkat = [];
 
-// TEMPAT PENYIMPANAN TELEMETRI REAL-TIME
 let klienOnlineLive = new Map();
 
-// ==========================================
-// PENGIRIMAN DATA KE DASHBOARD (BROADCAST)
-// ==========================================
 function kirimUpdateKeSemuaDashboard() {
   try {
-    // Dipetakan rata (flat object) agar bersesuaian dengan UI Dashboard
     const daftarDevicesLive = Array.from(klienOnlineLive.values()).map(p => ({
       id: p.id || '',
       ahkEnabled: p.ahkEnabled || false,
@@ -47,9 +41,6 @@ function kirimUpdateKeSemuaDashboard() {
   }
 }
 
-// ==========================================
-// CORE LOGIC WEBSOCKET SERVER
-// ==========================================
 wss.on('connection', (ws) => {
   console.log('🔌 Seseorang terhubung (Dashboard Web atau Client.exe)');
   kirimUpdateKeSemuaDashboard();
@@ -110,10 +101,6 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('🚨 REJEKSI PROMISE TIDAK TERTANGANI:', reason);
 });
-
-// ==========================================
-// REST API ENDPOINTS (HTTP PROTOCOL)
-// ==========================================
 
 app.get('/api/devices', (req, res) => {
   res.json({ devices: databasePerangkat });
