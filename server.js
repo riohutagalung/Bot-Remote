@@ -9,7 +9,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'DELETE', 'OPTIONS'] }));
+// =================================================================
+// PERBAIKAN DI SINI: Mengizinkan PUT & OPTIONS agar Vercel tidak diblokir
+// =================================================================
+app.use(cors({ 
+  origin: '*', 
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+app.options('*', cors()); // Bypass preflight request dari browser
+
 app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
@@ -94,6 +104,32 @@ app.post("/api/command", (req, res) => {
   res.json({ success: true });
 });
 
+// 4. API UNTUK MEMPERBARUI / MENYIMPAN DATA DARI VERCEL (PERBAIKAN FITUR PUT)
+app.put("/api/devices/:id", (req, res) => {
+  const { id } = req.params;
+  const updatedData = req.body || {};
+  const cleanId = id.toString().trim().toLowerCase();
+
+  // Jika data belum ada sama sekali di database, kita buatkan objek baru (Upsert logic)
+  if (!savedDevices[cleanId]) {
+    savedDevices[cleanId] = { id: id.toString().trim() };
+  }
+
+  // Gabungkan data lama dengan data baru yang diinput dari web dashboard
+  savedDevices[cleanId] = {
+    ...savedDevices[cleanId],
+    ...updatedData,
+    name: updatedData.name || updatedData.hostname || savedDevices[cleanId].name || "Target PC",
+    hostname: updatedData.hostname || updatedData.name || savedDevices[cleanId].hostname || "Target PC",
+    lastSeen: new Date()
+  };
+  
+  saveCloudData(savedDevices); // Kunci aman ke cloud_devices.json
+  broadcastToWeb(); // Semburkan data terbaru ke seluruh tampilan web
+  
+  return res.json({ success: true, message: "Cloud database updated successfully!" });
+});
+
 const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 const wss = new WebSocketServer({ server });
 
@@ -150,29 +186,3 @@ function broadcastToWeb() {
     }
   });
 }
-// 4. API UNTUK MEMPERBARUI / MENYIMPAN DATA DARI VERCEL (PERBAIKAN FITUR PUT)
-app.put("/api/devices/:id", (req, res) => {
-  const { id } = req.params;
-  const updatedData = req.body || {};
-  const cleanId = id.toString().trim().toLowerCase();
-
-  // Jika data belum ada sama sekali di database, kita buatkan objek baru (Upsert logic)
-  if (!savedDevices[cleanId]) {
-    savedDevices[cleanId] = { id: id.toString().trim() };
-  }
-
-  // Gabungkan data lama dengan data baru yang diinput dari web dashboard
-  savedDevices[cleanId] = {
-    ...savedDevices[cleanId],
-    ...updatedData,
-    // Pastikan field nama/hostname tidak hilang jika diinput manual
-    name: updatedData.name || updatedData.hostname || savedDevices[cleanId].name || "Target PC",
-    hostname: updatedData.hostname || updatedData.name || savedDevices[cleanId].hostname || "Target PC",
-    lastSeen: new Date()
-  };
-  
-  saveCloudData(savedDevices); // Kunci aman ke cloud_devices.json
-  broadcastToWeb(); // Semburkan data terbaru ke seluruh tampilan web
-  
-  return res.json({ success: true, message: "Cloud database updated successfully!" });
-});
