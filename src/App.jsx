@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
-const PIN_AKSES = import.meta.env.VITE_PASSWORD || 'Taikbabi182#';
 const URL_HTTP = "https://bot-remote-production.up.railway.app";
 const URL_WS = "wss://bot-remote-production.up.railway.app";
 
@@ -86,7 +85,7 @@ const KAMUS_BAHASA = {
     formTitleAdd: "Manual Hardware Registry & Configuration Override",
     formTitleEdit: "Edit Hardware Database Baseline",
     formPlaceName: "Laptop Custom Alias",
-    formPlaceSerial: "Serial Identity Key *",
+    formPlaceSerial: "Hardware Serial Identity Key *",
     formPlaceModel: "Hardware Model",
     formPlaceWifi: "Access Point SSID",
     formPlaceIp: "Local Network IP",
@@ -139,8 +138,8 @@ export default function App() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    const otorisasi = sessionStorage.getItem(SESS_KEY);
-    if (otorisasi) setSudahLogin(true);
+    const tokenOtorisasi = sessionStorage.getItem(SESS_KEY);
+    if (tokenOtorisasi) setSudahLogin(true);
     setCekSesiSelesai(true);
   }, []);
 
@@ -292,7 +291,7 @@ export default function App() {
         muatDataDariDatabase();
       }
     } catch (k) {
-      tampilkanNotifikasi('Execution signal failed');
+      gridLog('Execution signal failed');
     }
   };
 
@@ -331,23 +330,49 @@ export default function App() {
     }
   };
 
-  // FIXED METHOD: String password di-hardcode ke 'Taikbabi182#' untuk mencegah pemblokiran 403 oleh Railway
+  // AMAN & BEBAS INSPECT: Tidak perlu lagi parsing payload plain-text password di bodi request
   const hapusPerangkatPermanen = async (serialTarget) => {
     if (!window.confirm(teks.confirmDelete)) return;
     try {
+      const tokenSesi = sessionStorage.getItem(SESS_KEY);
+
       const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, { 
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: "Taikbabi182#" }) 
+        headers: { 
+          'Content-Type': 'application/json',
+          // Kirim token aman sebagai gembok validasi server (Fix Error 403)
+          'Authorization': `Bearer ${tokenSesi}`
+        }
       });
       if (hapus.ok) {
         tampilkanNotifikasi(teks.notifDbDeleted);
         muatDataDariDatabase();
       } else {
-        tampilkanNotifikasi('Unauthorized or key mismatched (403)');
+        tampilkanNotifikasi('Sesi habis atau kunci tidak valid (403)');
       }
     } catch (g) {
       tampilkanNotifikasi('Purge failure');
+    }
+  };
+
+  // AMAN & BEBAS INSPECT: Tombol Verifikasi memanggil Login API backend secara dinamis
+  const eksekusiLoginAPI = async () => {
+    try {
+      const kirim = await fetch(`${URL_HTTP}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: inputPassword })
+      });
+      const data = await kirim.json();
+
+      if (kirim.ok && data.success) {
+        sessionStorage.setItem(SESS_KEY, data.token); // Simpan token sesi aman
+        setSudahLogin(true);
+      } else {
+        tampilkanNotifikasi(data.message || 'Access Refused');
+      }
+    } catch (error) {
+      tampilkanNotifikasi('Gagal terkoneksi ke server.');
     }
   };
 
@@ -422,12 +447,12 @@ export default function App() {
             type="password"
             value={inputPassword}
             onChange={(e) => setInputPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && inputPassword === PIN_AKSES && (sessionStorage.setItem(SESS_KEY, '1'), setSudahLogin(true))}
+            onKeyDown={(e) => e.key === 'Enter' && eksekusiLoginAPI()}
             placeholder={teks.authPlace}
             className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-center text-sm focus:outline-none focus:border-indigo-500 font-mono transition"
           />
           <button 
-            onClick={() => inputPassword === PIN_AKSES ? (sessionStorage.setItem(SESS_KEY, '1'), setSudahLogin(true)) : tampilkanNotifikasi('Access Refused')} 
+            onClick={eksekusiLoginAPI} 
             className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-xs tracking-wider uppercase transition-all"
           >
             {teks.authBtn}
@@ -583,84 +608,59 @@ export default function App() {
                       }`}>
                         {perangkat.isOnline ? teks.tagOnline : teks.tagOffline}
                       </span>
-                      {perangkat.terbacaOtomatisBelumDisimpan && (
-                        <span className="bg-cyan-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded font-mono uppercase tracking-wider animate-pulse">
-                          {teks.tagUnsaved}
-                        </span>
-                      )}
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-1 flex flex-wrap gap-x-2 gap-y-0.5 font-medium">
-                      <span>Serial: <strong className="font-mono bg-slate-950 px-1 py-0.5 rounded text-slate-300 border border-slate-800/60">{perangkat.serial}</strong></span>
-                      <span className="text-slate-700">|</span>
-                      <span>Model: <strong className="text-slate-300">{perangkat.model}</strong></span>
-                    </div>
+                    <p className="text-xs text-slate-400 font-mono mt-1">Serial: {perangkat.serial}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">WiFi: {perangkat.wifi} | IP: {perangkat.ip}</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-x-6 gap-y-1 text-[11px] font-mono text-slate-400 bg-slate-950 border border-slate-800/60 px-4 py-2.5 rounded-xl w-full lg:w-auto shadow-inner">
-                  <div><span className="text-slate-600">IP ROUTE:</span> <span className="text-slate-200 font-bold">{perangkat.ip}</span></div>
-                  <div><span className="text-slate-600">MAC ADDR:</span> <span className="text-slate-200">{perangkat.mac}</span></div>
-                  <div><span className="text-slate-600">WIFI ID :</span> <span className="text-slate-300 font-sans font-bold">{perangkat.wifi}</span></div>
-                </div>
-
-                <div className="flex items-center gap-3 w-full lg:w-auto justify-end border-t border-slate-800/60 pt-3 lg:pt-0 lg:border-t-0">
-                  {perangkat.isOnline && !perangkat.ahkEnabled && (
-                    <div className="relative flex items-center">
-                      <FileCode className="w-3.5 h-3.5 text-slate-500 absolute left-2 pointer-events-none" />
-                      <input 
-                        type="text"
-                        placeholder="Nama_script.ahk"
-                        value={namaScriptInput[perangkat.serial] || ""}
-                        onChange={(e) => setNamaScriptInput({
-                          ...namaScriptInput,
-                          [perangkat.serial]: e.target.value
-                        })}
-                        className="bg-slate-950 text-[11px] font-mono border border-slate-800 focus:border-indigo-500 rounded-xl pl-7 pr-2 py-1.5 w-[140px] text-slate-200 focus:outline-none transition"
-                      />
-                    </div>
-                  )}
-
-                  <button
+                <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
+                  <button 
                     onClick={() => ubahStatusAhk(perangkat)}
                     disabled={!perangkat.isOnline}
-                    className={`min-w-[125px] text-center py-2 px-3 rounded-xl text-xs font-extrabold tracking-wider font-mono border transition-all ${
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                       !perangkat.isOnline 
-                        ? 'bg-slate-950 border-slate-800/80 text-slate-600 cursor-not-allowed' 
+                        ? 'bg-slate-950 border border-slate-800 text-slate-600 cursor-not-allowed' 
                         : perangkat.ahkEnabled 
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
-                          : 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
+                          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
+                          : 'bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
                     }`}
                   >
-                    {!perangkat.isOnline ? teks.btnControlOffline : (perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff)}
+                    {!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}
                   </button>
 
-                  {perangkat.terbacaOtomatisBelumDisimpan ? (
-                    <button 
-                      onClick={() => simpanKeDatabasePusat(perangkat)}
-                      className="flex items-center gap-1 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-slate-950 rounded-xl text-xs font-black transition uppercase tracking-wider"
-                    >
-                      <Save className="w-3.5 h-3.5" /> Save
-                    </button>
-                  ) : (
-                    <>
-                      <button onClick={() => { setDataForm(perangkat); setIdSedangDiedit(perangkat.serial); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-700 transition">
-                        {teks.btnEdit}
-                      </button>
-                      <button onClick={() => hapusPerangkatPermanen(perangkat.serial)} className="p-2 bg-slate-950 hover:bg-rose-950 border border-slate-800 hover:border-rose-900 text-slate-500 hover:text-rose-400 rounded-xl transition">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </>
-                  )}
+                  <button 
+                    onClick={() => {
+                      setIdSedangDiedit(perangkat.serial);
+                      setDataForm({
+                        name: perangkat.name,
+                        serial: perangkat.serial,
+                        model: perangkat.model,
+                        wifi: perangkat.wifi,
+                        ip: perangkat.ip,
+                        mac: perangkat.mac
+                      });
+                    }}
+                    className="p-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-300 hover:bg-slate-700 transition"
+                  >
+                    {teks.btnEdit}
+                  </button>
+
+                  <button 
+                    onClick={() => hapusPerangkatPermanen(perangkat.serial)}
+                    className="p-2 bg-slate-800 border border-slate-700 rounded-xl text-rose-400 hover:bg-rose-950 hover:border-rose-900 transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
-            )
+            ))
           )}
         </div>
       </main>
 
       {notifikasi && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-100 shadow-2xl flex items-center gap-2 font-mono animate-fade-in">
-          <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+        <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500 animate-bounce">
           {notifikasi}
         </div>
       )}

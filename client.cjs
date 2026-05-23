@@ -90,9 +90,13 @@ function kendalikanAhkBalikLayar(aksi, namaScriptKustom = "") {
 
       if (fileTarget) {
         const fullScriptPath = path.join(CURRENT_DIR, fileTarget);
-        // Jalankan menggunakan absolute path agar Windows pasti menemukannya di balik layar
-        cmd = `start "" "${fullScriptPath}"`;
-        console.log(`[Dynamic Exec] Menjalankan script: ${fullScriptPath}`);
+        
+        // =======================================================================
+        // PERBAIKAN DI SINI: Memanggil AutoHotkey.exe secara absolut agar Windows
+        // tidak tersesat mencari path file saat aplikasi berjalan di mode Startup.
+        // =======================================================================
+        cmd = `start "" "AutoHotkey.exe" "${fullScriptPath}"`;
+        console.log(`[Dynamic Exec] Menjalankan script via engine: ${fullScriptPath}`);
       } else {
         console.log("[Alert] Tidak ada file .ahk ditemukan di folder ini!");
         return resolve();

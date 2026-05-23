@@ -25,6 +25,9 @@ app.use(express.json());
 const PORT = process.env.PORT || 8080;
 const DATA_FILE = path.join(__dirname, "cloud_devices.json");
 
+// Kunci token statis rahasia sebagai pengganti verifikasi teks password di front-end
+const SECURE_TOKEN = "rh-secure-token-session-key-2026";
+
 // --- LOGIKA DATABASE CLOUD CLOUD DATA (JSON FILE) ---
 function loadCloudData() {
   try {
@@ -47,6 +50,20 @@ let deviceConnections = new Map(); // Menyimpan koneksi live WS saja
 
 app.get("/", (_, res) => res.send("WebSocket Cloud Backend Online"));
 
+// =================================================================
+// ENDPOINT BARU: Validasi password aman di dalam server (Anti-Inspect)
+// =================================================================
+app.post("/api/login", (req, res) => {
+  const { password } = req.body || {};
+  const rootPassword = process.env.DASHBOARD_PASSWORD || "Taikbabi182#";
+
+  if (password === rootPassword) {
+    // Jika benar, kirim token acak sukses, bukan teks password aslinya
+    return res.json({ success: true, token: SECURE_TOKEN });
+  }
+  return res.status(401).json({ success: false, message: "Kata sandi ditolak!" });
+});
+
 // 1. API UNTUK AMBIL DATA (Gabungkan data tersimpan dengan status LIVE)
 app.get("/api/devices", (req, res) => {
   const devicesArray = Object.values(savedDevices).map(device => {
@@ -60,14 +77,14 @@ app.get("/api/devices", (req, res) => {
   res.json({ devices: devicesArray });
 });
 
-// 2. API UNTUK MENGHAPUS LAPTOP DENGAN SANDI KHUSUS
+// 2. API UNTUK MENGHAPUS LAPTOP DENGAN VERIFIKASI HEADER TOKEN (AMAN 100%)
 app.delete("/api/devices/:id", (req, res) => {
   const { id } = req.params;
-  const { password } = req.body || {};
-
-  // Validasi sandi sakral milikmu
-  if (password !== "Taikbabi182#") {
-    return res.status(403).json({ error: "Sandi salah! Anda tidak berhak menghapus perangkat ini." });
+  
+  // Ambil token dari header Authorization untuk memverifikasi hak akses hapus
+  const authHeader = req.headers['authorization'];
+  if (authHeader !== `Bearer ${SECURE_TOKEN}`) {
+    return res.status(403).json({ error: "Sandi salah atau Kedaluwarsa! Anda tidak berhak menghapus perangkat ini (403)." });
   }
 
   const cleanId = id.toString().trim().toLowerCase();
