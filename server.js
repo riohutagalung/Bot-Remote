@@ -8,28 +8,33 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 
-app.use(cors());
+// Konfigurasi CORS eksplisit untuk Frontend Vercel Anda
+app.use(cors({
+  origin: [
+    'https://bot-remote-iyrx.vercel.app', 
+    'http://localhost:5173',               
+    'http://localhost:3000'                
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+app.options('*', cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 
-// DATABASE SEMENTARA (Disimpan di Memori Server)
-// Menyimpan data laptop yang sedang aktif/online
 let onlineDevices = new Map(); 
-
-// Menyimpan koneksi WebSocket berdasarkan deviceId agar bisa dikontrol balik
 let deviceConnections = new Map();
 
-// Endpoint untuk cek status backend
 app.get("/", (_, res) => res.send("WebSocket backend online"));
 app.get("/ping", (_, res) => res.status(200).send("pong"));
 
-// ----- API ROUTES UNTUK WEB FRONTEND -----
-
-// 1. Ambil semua data laptop yang sedang online
+// 1. Ambil semua data laptop yang sedang online (Format FLAT agar tabel Dashboard tidak kosong)
 app.get("/api/devices", (req, res) => {
   const devicesArray = Array.from(onlineDevices.values());
-  res.json(devicesArray);
+  res.json({ devices: devicesArray });
 });
 
 // 2. Kirim perintah ON/OFF AutoHotkey dari Web ke Laptop tertentu
@@ -40,91 +45,78 @@ app.post("/api/command", (req, res) => {
     return res.status(400).json({ error: "Device ID and command required" });
   }
 
-  // Cari koneksi WebSocket milik laptop tersebut
-  const clientWs = deviceConnections.get(deviceId);
+  const clientWs = deviceConnections.get(deviceId.toString().trim().toLowerCase());
 
-  if (!clientWs || clientWs.readyState !== 1) { // 1 berarti OPEN
+  if (!clientWs || clientWs.readyState !== 1) { 
     return res.status(404).json({ error: "Laptop sedang offline atau tidak terhubung" });
   }
 
-  // Kirim perintah langsung ke client.exe lewat WebSocket
+  // Kirim sinyal instruksi ke client.cjs
   clientWs.send(JSON.stringify({
     type: "execute_command",
-    deviceId: deviceId,
-    command: command // "start_ahk" atau "stop_ahk"
+    action: command // "start_ahk" atau "stop_ahk"
   }));
 
   console.log(`[Web Command] Perintah '${command}' dikirim ke ${deviceId}`);
   res.json({ success: true, message: `Command '${command}' forwarded to device.` });
 });
 
-
-// ----- JALANKAN SERVER -----
 const server = app.listen(PORT, () => {
-  console.log(`HTTP + WS server running on port ${PORT}`);
+  console.log(`🚀 HTTP + WS server running on port ${PORT}`);
 });
 
-
-// ----- AKTIFKAN WEBSOCKET SERVER -----
+// PROSES WEBSOCKET SERVER
 const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws) => {
   let currentDeviceId = null;
+  console.log("🔌 Ada koneksi WebSocket baru masuk...");
 
-  console.log("Ada koneksi WebSocket baru masuk...");
-
-  // Mendengarkan data yang dikirim oleh client.exe atau Web Frontend
   ws.on("message", (message) => {
     try {
       const data = JSON.parse(message.toString());
 
-      // JIKA CLIENT.EXE MENDAFTARKAN DIRI (LAPTOP ONLINE)
-      if (data.type === "register") {
-        currentDeviceId = data.deviceId;
+      // JIKA CLIENT MENDAFTARKAN DIRI / KIRIM HEARTBEAT TELEMETRI
+      if (data && data.id) {
+        const cleanId = data.id.toString().trim().toLowerCase();
+        currentDeviceId = cleanId;
         
-        // Simpan koneksi ws dan data info laptopnya
-        deviceConnections.set(currentDeviceId, ws);
-        onlineDevices.set(currentDeviceId, {
-          id: data.deviceId,
-          info: data.deviceInfo,
-          ahkEnabled: false, // default mati saat baru connect
+        deviceConnections.set(cleanId, ws);
+        
+        // Simpan dengan struktur FLAT agar langsung terbaca di komponen UI Dashboard Anda
+        onlineDevices.set(cleanId, {
+          id: data.id,
+          ahkEnabled: typeof data.ahkEnabled === 'boolean' ? data.ahkEnabled : false,
+          hostname: data.hostname || '-',
+          model: data.model || '-',
+          wifi: data.wifi || '-',
+          ip: data.ip || '-',
+          mac: data.mac || '-',
           lastSeen: new Date()
         });
 
-        console.log(`[Register] Laptop Online: ${currentDeviceId}`);
-        broadcastToWeb(); // Beritahu web secara real-time
+        console.log(`[Telemetry Sync] Device: ${cleanId} | AHK: ${data.ahkEnabled}`);
+        broadcastToWeb(); 
       }
-
-      // JIKA CLIENT.EXE MEMBERIKAN LAPORAN STATUS AHK SETELAH DI-KLIK
-      if (data.type === "status_update") {
-        if (onlineDevices.has(data.deviceId)) {
-          const device = onlineDevices.get(data.deviceId);
-          device.ahkEnabled = data.status.ahkEnabled; // update status true/false
-          device.lastSeen = new Date();
-          onlineDevices.set(data.deviceId, device);
-
-          console.log(`[Status Update] ${data.deviceId} -> AHK Enabled: ${data.status.ahkEnabled}`);
-          broadcastToWeb(); // Beritahu web secara real-time
-        }
-      }
-
     } catch (err) {
       console.error("Gagal membaca pesan WebSocket:", err.message);
     }
   });
 
-  // JIKA LAPTOP / CLIENT.EXE TERPUTUS (CLOSED)
   ws.on("close", () => {
     if (currentDeviceId) {
-      console.log(`[Disconnect] Laptop Offline: ${currentDeviceId}`);
+      console.log(`❌ [Disconnect] Laptop Offline: ${currentDeviceId}`);
       deviceConnections.delete(currentDeviceId);
-      onlineDevices.delete(currentDeviceId); // Hapus dari daftar online
-      broadcastToWeb(); // Beritahu web kalau laptop sudah offline
+      onlineDevices.delete(currentDeviceId); 
+      broadcastToWeb(); 
     }
+  });
+
+  ws.on("error", (err) => {
+    console.error("WebSocket Socket Error:", err.message);
   });
 });
 
-// Fungsi otomatis untuk menyebarkan (broadcast) data terbaru ke semua Web Frontend yang nempel
 function broadcastToWeb() {
   const devicesArray = Array.from(onlineDevices.values());
   const payload = JSON.stringify({
@@ -138,3 +130,7 @@ function broadcastToWeb() {
     }
   });
 }
+
+// Penyelamat dari crash global
+process.on('uncaughtException', (err) => console.error('🚨 Fatal Error:', err.message));
+process.on('unhandledRejection', (reason) => console.error('🚨 Unhandled Promise:', reason));

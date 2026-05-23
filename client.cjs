@@ -5,7 +5,6 @@ const path = require("path");
 
 const SERVER_URL = "wss://bot-remote-production.up.railway.app";
 
-// Ambil data sistem dengan fallback yang aman
 function getSystemInfo() {
   return {
     hostname: os.hostname(),
@@ -69,10 +68,8 @@ function getMACAddress() {
   return "-";
 }
 
-// Global state tracking internal untuk dikirim ke backend
 let statusAhkSaatIni = false;
 
-// Fungsi kontrol AutoHotkey
 function controlAutoHotkey(action) {
   return new Promise((resolve) => {
     if (os.platform() !== "win32") {
@@ -104,6 +101,7 @@ function connectToServer() {
       const info = getSystemInfo();
       const cleanId = info.serial.replace(/[^\w-]/g, "_");
 
+      // Payload flat yang dikirim ke server.js
       const payload = {
         id: cleanId,
         ahkEnabled: statusAhkSaatIni,
@@ -119,23 +117,24 @@ function connectToServer() {
   };
 
   ws.on("open", () => {
-    console.log("Connected to server successfully");
+    console.log("✔ Connected to remote server safely");
     kirimSinyalTelemetri();
-    intervalPingTelemetri = setInterval(kirimSinyalTelemetri, 10000);
+    intervalPingTelemetri = setInterval(kirimSinyalTelemetri, 10000); // Sinkronisasi berkala setiap 10 detik
   });
 
   ws.on("message", (message) => {
     try {
       const data = JSON.parse(message.toString());
 
-      if (data && data.action) {
-        console.log("Menerima perintah sinyal:", data.action);
+      // Menangkap eksekusi perintah dari server.js baru
+      if (data && data.type === "execute_command" && data.action) {
+        console.log("Menerima instruksi aksi:", data.action);
         const targetAksi = data.action === "start_ahk" ? "start" : "stop";
         
         controlAutoHotkey(targetAksi).then(() => {
           statusAhkSaatIni = (targetAksi === "start");
           console.log(`Status Engine AHK sekarang: ${statusAhkSaatIni ? "NYALA" : "MATI"}`);
-          kirimSinyalTelemetri();
+          kirimSinyalTelemetri(); // kabari server secepatnya setelah status berubah
         });
       }
     } catch (err) {

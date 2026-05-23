@@ -1,14 +1,16 @@
 {
-  "name": "bot-remote-client",
+  "name": "bot-remote-system",
   "version": "1.0.0",
-  "description": "Remote AutoHotkey controller client",
+  "description": "Remote AutoHotkey System Coordination",
   "type": "module",
-  "main": "client.cjs",
-  "bin": "client.cjs",
+  "main": "server.js",
   "scripts": {
-    "start": "node client.cjs"
+    "start": "node server.js",
+    "client": "node client.cjs"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "ws": "^8.16.0"
   },
   "pkg": {
