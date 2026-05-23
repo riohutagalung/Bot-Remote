@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-// Mengimport icon-icon yang digunakan di dalam component
 import { 
   Eye, 
   EyeOff, 
@@ -115,74 +114,74 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Ambil data remote device pertama kali dan fallback berkala (HTTP polling)
+  const fetchRemoteDevices = async () => {
+    try {
+      const res = await fetch(`${BACKEND_HTTP}/api/devices`);
+      if (!res.ok) throw new Error('Failed to fetch remote devices');
+      const data = await res.json();
+      setRemoteDevices(data);
+    } catch (error) {
+      console.warn('Remote device fetch failed:', error);
+    }
+  };
+
   useEffect(() => {
     if (!isAuthenticated) return;
-
-    const fetchRemoteDevices = async () => {
-      try {
-        const res = await fetch(`${BACKEND_HTTP}/api/devices`);
-        if (!res.ok) throw new Error('Failed to fetch remote devices');
-        const data = await res.json();
-        setRemoteDevices(data);
-      } catch (error) {
-        console.warn('Remote device fetch failed:', error);
-      }
-    };
-
     fetchRemoteDevices();
+    const interval = setInterval(fetchRemoteDevices, 4000); // Sinkronisasi otomatis tiap 4 detik
+    return () => clearInterval(interval);
   }, [isAuthenticated]);
 
+  // Handle Koneksi Real-time WebSocket
   useEffect(() => {
     if (!isAuthenticated) return;
 
     let ws;
-    try {
-      ws = new WebSocket(BACKEND_WS);
-      wsRef.current = ws;
-    } catch (error) {
-      setWsError(error.message || 'WebSocket initialization failed');
-      setWsConnected(false);
-      return;
-    }
-
-    ws.onopen = () => {
-      setWsConnected(true);
-      setWsError(null);
-      ws.send(JSON.stringify({ type: 'request_device_list' }));
-      showToast('Connected to control server');
-    };
-
-    ws.onmessage = (event) => {
+    const connectWS = () => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'device_list') {
-          setRemoteDevices(data.devices || []);
-        } else if (data.type === 'registered') {
-          showToast(`Device registered: ${data.deviceId}`);
-        } else if (data.type === 'command_sent') {
-          showToast(`Perintah dikirim ke ${data.targetDeviceId}`, 'success');
-        } else if (data.type === 'error') {
-          showToast(data.message || 'Server error', 'error');
-        }
+        ws = new WebSocket(BACKEND_WS);
+        wsRef.current = ws;
       } catch (error) {
-        console.error('WebSocket parse error:', error);
+        setWsError(error.message || 'WebSocket initialization failed');
+        setWsConnected(false);
+        return;
       }
-    };
 
-    ws.onclose = () => {
-      setWsConnected(false);
-      setTimeout(() => {
-        if (isAuthenticated) {
-          showToast('Reconnecting to control server...', 'error');
-          setWsConnected(false);
+      ws.onopen = () => {
+        setWsConnected(true);
+        setWsError(null);
+        showToast('Connected to control server');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // Menerima broadcast list device online dari server.js yang baru
+          if (data.type === 'device_list') {
+            setRemoteDevices(data.devices || []);
+          }
+        } catch (error) {
+          console.error('WebSocket parse error:', error);
         }
-      }, 5000);
+      };
+
+      ws.onclose = () => {
+        setWsConnected(false);
+        setTimeout(() => {
+          if (isAuthenticated) {
+            connectWS(); // Auto reconnect jika putus
+          }
+        }, 5000);
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setWsError('WebSocket error');
+      };
     };
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setWsError('WebSocket error');
-    };
+    connectWS();
 
     return () => {
       if (ws) ws.close();
@@ -211,34 +210,20 @@ export default function App() {
       sessionStorage.removeItem(AUTH_KEY);
       setIsAuthenticated(false);
       setDevices([]);
-      setFormData({
-        name: '',
-        model: '',
-        serial: '',
-        uuid: '',
-        hostname: '',
-        username: '',
-        wifi: '',
-        bssid: '',
-        ip: '',
-        publicIp: '',
-        mac: '',
-        channel: '',
-        securityType: 'WPA2-Enterprise',
-      });
       showToast('Logged out successfully');
     }
   };
 
-  const remoteDeviceMatch = (device) =>
-    remoteDevices.find((d) => d.id === device.serial || d.id === device.id || d.serial === device.serial);
+  // FUNGSI MATCHING DIKOREKSI: Mencocokkan isi ID dari server (serial-mac-wifi) dengan Serial Number web
+  const remoteDeviceMatch = (webDevice) => {
+    if (!webDevice.serial) return null;
+    return remoteDevices.find((remote) => {
+      return remote.id.toLowerCase().includes(webDevice.serial.toLowerCase().trim());
+    });
+  };
 
+  // Kirim perintah AHK ke backend API
   const sendCommand = async (deviceId, command) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'command', targetDeviceId: deviceId, command }));
-      return true;
-    }
-
     try {
       const res = await fetch(`${BACKEND_HTTP}/api/command`, {
         method: 'POST',
@@ -247,9 +232,10 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Command failed');
+      showToast(`Perintah '${command}' berhasil dikirim!`, 'success');
       return true;
     } catch (error) {
-      showToast(`Remote command failed: ${error.message}`, 'error');
+      showToast(`Gagal mengirim perintah: ${error.message}`, 'error');
       return false;
     }
   };
@@ -257,15 +243,16 @@ export default function App() {
   const toggleAhk = async (device) => {
     const remote = remoteDeviceMatch(device);
     if (!remote) {
-      showToast('Device not connected to backend', 'error');
+      showToast('Laptop tidak terdeteksi online di backend', 'error');
       return;
     }
 
+    // Ambil status dari data remote asli server, jika true maka stop, jika false maka start
     const command = remote.ahkEnabled ? 'stop_ahk' : 'start_ahk';
-    const success = await sendCommand(remote.id, command);
-    if (success) {
-      setDevices((prev) => prev.map((d) => (d.id === device.id ? { ...d, ahkEnabled: !d.ahkEnabled } : d)));
-    }
+    await sendCommand(remote.id, command);
+    
+    // Refresh instan data remote
+    setTimeout(fetchRemoteDevices, 500);
   };
 
   const handleAddDevice = () => {
@@ -284,8 +271,6 @@ export default function App() {
         {
           ...formData,
           id: Date.now(),
-          connected: false,
-          ahkEnabled: false,
           lastSeen: new Date().toLocaleString(),
         },
       ]);
@@ -293,19 +278,8 @@ export default function App() {
     }
 
     setFormData({
-      name: '',
-      model: '',
-      serial: '',
-      uuid: '',
-      hostname: '',
-      username: '',
-      wifi: '',
-      bssid: '',
-      ip: '',
-      publicIp: '',
-      mac: '',
-      channel: '',
-      securityType: 'WPA2-Enterprise',
+      name: '', model: '', serial: '', uuid: '', hostname: '', username: '',
+      wifi: '', bssid: '', ip: '', publicIp: '', mac: '', channel: '', securityType: 'WPA2-Enterprise',
     });
   };
 
@@ -328,12 +302,12 @@ export default function App() {
     lines.forEach((line) => {
       const lower = line.toLowerCase();
       if (lower.includes('serialnumber')) {
-        const value = line.split('=')[1]?.trim();
-        if (value) parsed.serial = value;
+        const value = line.split('=')[1]?.trim() || line.replace(/serialnumber/i, '').trim();
+        if (value && !value.includes('SerialNumber')) parsed.serial = value;
       }
       if (lower.includes('uuid')) {
-        const value = line.split('=')[1]?.trim();
-        if (value) parsed.uuid = value;
+        const value = line.split('=')[1]?.trim() || line.replace(/uuid/i, '').trim();
+        if (value && !value.includes('UUID')) parsed.uuid = value;
       }
       if (lower.includes('hostname')) {
         const value = line.split(/=|:/)[1]?.trim();
@@ -351,13 +325,9 @@ export default function App() {
         const match = line.match(/([0-9A-F]{2}[:-]){5}[0-9A-F]{2}/i);
         if (match) parsed.mac = match[0];
       }
-      if (lower.includes('ssid')) {
+      if (lower.includes('ssid') && !lower.includes('bssid')) {
         const value = line.split(':')[1]?.trim();
         if (value) parsed.wifi = value;
-      }
-      if (lower.includes('bssid')) {
-        const match = line.match(/([0-9A-F]{2}[:-]){5}[0-9A-F]{2}/i);
-        if (match) parsed.bssid = match[0];
       }
     });
 
@@ -382,7 +352,6 @@ export default function App() {
   const importJson = (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -390,8 +359,6 @@ export default function App() {
         if (Array.isArray(imported)) {
           setDevices(imported);
           showToast('Devices imported successfully');
-        } else {
-          showToast('Invalid JSON format', 'error');
         }
       } catch {
         showToast('Failed to import JSON', 'error');
@@ -400,337 +367,187 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(JSON.stringify(devices, null, 2));
-    showToast('Copied to clipboard');
-  };
-
-  const clearAll = () => {
-    if (window.confirm('Are you sure you want to delete ALL devices? This action cannot be undone.')) {
-      setDevices([]);
-      showToast('All devices cleared');
-    }
-  };
-
   const filtered = useMemo(
-    () =>
-      devices.filter((device) =>
-        Object.values(device).join(' ').toLowerCase().includes(searchQuery.toLowerCase())
-      ),
+    () => devices.filter((d) => Object.values(d).join(' ').toLowerCase().includes(searchQuery.toLowerCase())),
     [devices, searchQuery]
   );
 
   const stats = {
     total: devices.length,
-    online: devices.filter((device) => remoteDeviceMatch(device)).length,
-    offline: devices.filter((device) => !remoteDeviceMatch(device)).length,
-    ahkEnabled: devices.filter((device) => device.ahkEnabled).length,
+    online: devices.filter((d) => remoteDeviceMatch(d)).length,
+    offline: devices.filter((d) => !remoteDeviceMatch(d)).length,
+    ahkEnabled: remoteDevices.filter((rd) => rd.ahkEnabled).length,
   };
 
-  if (!authChecked) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-lg font-semibold">Memeriksa autentikasi...</p>
-          <p className="text-sm text-slate-400">Silakan tunggu sebentar.</p>
-        </div>
-      </div>
-    );
-  }
+  if (!authChecked) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Memeriksa...</div>;
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-        <div className="w-full max-w-md relative">
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-            <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-slate-800 p-8 rounded-2xl w-full max-w-md border border-slate-700 space-y-4 shadow-xl">
+          <h1 className="text-2xl font-bold text-white text-center">RH Control Login</h1>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              placeholder="Enter password"
+              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-slate-400">
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
           </div>
-          <div className="relative bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-8 space-y-6">
-            <div className="text-center space-y-2">
-              <h1 className="text-3xl font-bold text-white">RH Control</h1>
-              <p className="text-slate-400">House Device Management</p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                    placeholder="Enter password"
-                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300"
-                  >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                  </button>
-                </div>
-              </div>
-              <button
-                onClick={handleLogin}
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-lg transition"
-              >
-                Login
-              </button>
-            </div>
-
-            <div className="text-center text-sm text-slate-400">
-              <p>Secure access to remote device management</p>
-            </div>
-          </div>
+          <button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition">Login</button>
         </div>
-        {toast && (
-          <div className={`toast ${toast.type === 'error' ? 'toast-error' : 'toast-success'}`}>{toast.msg}</div>
-        )}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <header className="bg-white border-b-2 border-slate-200 sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">RH Control Center</h1>
-              <p className="text-sm text-slate-600 mt-1">Remote AutoHotkey device manager</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
-                {wifiStatus.connected ? (
-                  <>
-                    <Wifi className="w-5 h-5 text-green-500" />
-                    <span className="text-sm font-medium text-green-700">Online</span>
-                  </>
-                ) : (
-                  <>
-                    <WifiOff className="w-5 h-5 text-red-500" />
-                    <span className="text-sm font-medium text-red-700">Offline</span>
-                  </>
-                )}
-              </div>
-              <div className="text-sm text-slate-600">{sessionTime.toLocaleTimeString()}</div>
-              <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition">
-                <LogOut size={18} />
-                Logout
-              </button>
-            </div>
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">RH Control Center</h1>
+          <p className="text-xs text-slate-500">System Monitoring & AutoHotkey Remote</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full border text-xs font-medium">
+            <div className={`w-2.5 h-2.5 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+            {wsConnected ? 'WS Connected' : 'WS Disconnected'}
           </div>
+          <button onClick={handleLogout} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition">
+            <LogOut size={14} /> Logout
+          </button>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        {/* STATS */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Total Devices', value: stats.total, color: 'from-blue-500 to-blue-600', icon: '📊' },
-            { label: 'Connected Remote', value: stats.online, color: 'from-green-500 to-green-600', icon: '🔌' },
-            { label: 'Disconnected', value: stats.offline, color: 'from-red-500 to-red-600', icon: '⚠️' },
-            { label: 'AHK Enabled', value: stats.ahkEnabled, color: 'from-purple-500 to-purple-600', icon: '⚙️' },
-          ].map((stat, idx) => (
-            <div key={idx} className={`card bg-gradient-to-br ${stat.color} text-white shadow-lg`}>
-              <p className="text-sm font-medium opacity-90">{stat.label}</p>
-              <p className="text-4xl font-bold mt-3">{stat.value}</p>
-              <p className="text-sm opacity-75 mt-2">{stat.icon}</p>
+            { label: 'Total Terdaftar', value: stats.total, bg: 'bg-blue-600' },
+            { label: 'Laptop Online', value: stats.online, bg: 'bg-green-600' },
+            { label: 'Laptop Offline', value: stats.offline, bg: 'bg-red-600' },
+            { label: 'AHK Sedang Aktif', value: stats.ahkEnabled, bg: 'bg-purple-600' },
+          ].map((s, i) => (
+            <div key={i} className={`${s.bg} text-white p-4 rounded-xl shadow-sm`}>
+              <p className="text-xs font-medium opacity-80">{s.label}</p>
+              <p className="text-2xl font-bold mt-1">{s.value}</p>
             </div>
           ))}
         </div>
 
-        <div className="card space-y-6 shadow-lg border-2 border-slate-200">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">{editingId ? '✏️ Edit Device' : '➕ Add / Setup Laptop'}</h2>
-            <p className="text-sm text-slate-600 mt-2">{editingId ? 'Update device information' : 'Add a new device to monitor and control remotely'}</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        {/* INPUT FORM */}
+        <div className="card space-y-4">
+          <h2 className="text-lg font-bold">{editingId ? '✏️ Edit Device' : '➕ Add / Setup Laptop'}</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {[
-              { key: 'name', label: 'Laptop Name', required: true },
+              { key: 'name', label: 'Laptop Name *' },
+              { key: 'serial', label: 'Serial Number (BIOS) *' },
               { key: 'model', label: 'Model' },
-              { key: 'serial', label: 'Serial Number (BIOS)', required: true },
-              { key: 'uuid', label: 'Machine UUID' },
-              { key: 'hostname', label: 'Hostname' },
-              { key: 'username', label: 'Windows Username' },
               { key: 'wifi', label: 'WiFi SSID' },
-              { key: 'bssid', label: 'BSSID / Router MAC' },
               { key: 'ip', label: 'Local IP' },
-              { key: 'publicIp', label: 'Public IP (optional)' },
               { key: 'mac', label: 'MAC Address' },
-              { key: 'channel', label: 'Network Channel' },
-            ].map(({ key, label, required }) => (
-              <div key={key}>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">
-                  {label} {required && <span className="text-red-500">*</span>}
-                </label>
+            ].map((f) => (
+              <div key={f.key}>
+                <label className="text-xs font-semibold block mb-1 text-slate-600">{f.label}</label>
                 <input
                   type="text"
-                  placeholder={label}
-                  value={formData[key]}
-                  onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                  value={formData[f.key]}
+                  onChange={(e) => setFormData({ ...formData, [f.key]: e.target.value })}
+                  className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                  placeholder={f.label}
                 />
               </div>
             ))}
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Security Type</label>
-              <select
-                value={formData.securityType}
-                onChange={(e) => setFormData({ ...formData, securityType: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-              >
-                <option>WPA2-Enterprise</option>
-                <option>WPA3</option>
-                <option>WPA2-Personal</option>
-                <option>Open</option>
-              </select>
-            </div>
           </div>
-
-          <div className="flex flex-wrap gap-2 pt-2">
-            <button onClick={handleAddDevice} className="btn btn-primary flex-1">
-              <Plus className="w-4 h-4 mr-2" />
-              {editingId ? 'Update Device' : 'Add Device'}
-            </button>
-            {editingId && (
-              <button
-                onClick={() => {
-                  setEditingId(null);
-                  setFormData({
-                    name: '',
-                    model: '',
-                    serial: '',
-                    uuid: '',
-                    hostname: '',
-                    username: '',
-                    wifi: '',
-                    bssid: '',
-                    ip: '',
-                    publicIp: '',
-                    mac: '',
-                    channel: '',
-                    securityType: 'WPA2-Enterprise',
-                  });
-                }}
-                className="btn btn-outline"
-              >
-                Cancel
-              </button>
-            )}
-            <button onClick={() => setShowCmdModal(true)} className="btn btn-outline flex-1">
-              Import CMD Data
-            </button>
-          </div>
-
-          <div className="pt-2 border-t border-slate-200 flex flex-wrap gap-2">
-            <button onClick={copyToClipboard} className="btn btn-outline btn-sm">
-              <Copy className="w-4 h-4 mr-2" />
-              Copy Data JSON
-            </button>
-            <button onClick={exportJson} className="btn btn-outline btn-sm">
-              <Download className="w-4 h-4 mr-2" />
-              Export All
-            </button>
-            <label className="btn btn-outline btn-sm cursor-pointer">
-              <Upload className="w-4 h-4 mr-2" />
-              Import JSON
-              <input type="file" accept=".json" onChange={importJson} className="hidden" />
-            </label>
-            <button onClick={clearAll} className="btn btn-danger btn-sm ml-auto">
-              <Trash2 className="w-4 h-4 mr-2" />
-              Clear All Devices
-            </button>
+          <div className="flex gap-2">
+            <button onClick={handleAddDevice} className="btn btn-primary text-sm py-1.5 flex-1">{editingId ? 'Update' : 'Add Device'}</button>
+            <button onClick={() => setShowCmdModal(true)} className="btn btn-outline text-sm py-1.5">Import CMD</button>
           </div>
         </div>
 
-        <div className="space-y-4">
-          {filtered.length === 0 ? (
-            <div className="card text-center py-12">
-              <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-              <p className="text-slate-600">{devices.length === 0 ? 'No devices added yet. Add your first device above!' : 'No devices match your search.'}</p>
-            </div>
-          ) : (
-            filtered.map((device) => {
-              const remote = remoteDeviceMatch(device);
-              return (
-                <div key={device.id} className="card">
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start">
-                    <div>
-                      <h3 className="font-bold text-slate-900">{device.name}</h3>
-                      <p className="text-sm text-slate-600">{device.model}</p>
-                      <p className="text-xs text-slate-500 mt-2">Serial: {device.serial}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-600 font-semibold">NETWORK</p>
-                      <p className="text-sm text-slate-900">{device.wifi}</p>
-                      <p className="text-xs text-slate-600">{device.ip}</p>
-                      <p className="text-xs text-slate-500 mt-1">MAC: {device.mac}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-600 font-semibold">STATUS</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <div className={`w-3 h-3 rounded-full ${remote ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <span className="text-sm font-medium">{remote ? 'Online' : 'Offline'}</span>
-                      </div>
-                      <p className="text-xs text-slate-600 mt-2">{device.lastSeen}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 justify-end">
-                      <button
-                        onClick={() => toggleAhk(device)}
-                        className={`btn btn-sm ${device.ahkEnabled ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}
-                        disabled={!remote}
-                        title={remote ? 'Toggle AHK state remotely' : 'Device not connected'}
-                      >
-                        {device.ahkEnabled ? 'AHK ON' : 'AHK OFF'}
-                      </button>
-                      <button onClick={() => handleEdit(device)} className="btn btn-outline btn-sm">Edit</button>
-                      <button onClick={() => setShowDeleteConfirm(device.id)} className="btn btn-danger btn-sm">Delete</button>
-                    </div>
+        {/* SEARCH BAR */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Search laptops..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2 border rounded-xl bg-white shadow-sm text-sm"
+          />
+        </div>
+
+        {/* LAPTOP LIST */}
+        <div className="space-y-3">
+          {filtered.map((device) => {
+            const remote = remoteDeviceMatch(device);
+            // Ambil data status AHK yang live dari server, jika offline pakai default false
+            const isAhkLive = remote ? remote.ahkEnabled : false;
+
+            return (
+              <div key={device.id} className="card flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base text-slate-900">{device.name}</h3>
+                    <div className={`w-2.5 h-2.5 rounded-full ${remote ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <span className="text-xs font-semibold text-slate-500">{remote ? 'Online' : 'Offline'}</span>
                   </div>
-                  {showDeleteConfirm === device.id && (
-                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
-                      <p className="text-sm text-red-700">Confirm deletion of "{device.name}"?</p>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleDelete(device.id)} className="btn btn-danger btn-sm">Delete</button>
-                        <button onClick={() => setShowDeleteConfirm(null)} className="btn btn-outline btn-sm">Cancel</button>
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-xs text-slate-500">Serial: <span className="font-mono bg-slate-100 px-1 rounded">{device.serial}</span></p>
+                  {remote && <p className="text-xs text-blue-600 font-medium">Connected as: {remote.id}</p>}
                 </div>
-              );
-            })
-          )}
+
+                <div className="text-xs text-slate-600 space-y-0.5">
+                  <p><strong>IP:</strong> {remote?.info?.ip || device.ip || '-'}</p>
+                  <p><strong>MAC:</strong> {remote?.info?.mac || device.mac || '-'}</p>
+                  <p><strong>WiFi:</strong> {remote?.info?.wifi || device.wifi || '-'}</p>
+                </div>
+
+                <div className="flex gap-2 w-full md:w-auto justify-end">
+                  <button
+                    onClick={() => toggleAhk(device)}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      !remote 
+                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                        : isAhkLive 
+                        ? 'bg-green-500 text-white hover:bg-green-600 shadow-sm' 
+                        : 'bg-red-500 text-white hover:bg-red-600 shadow-sm'
+                    }`}
+                    disabled={!remote}
+                  >
+                    {isAhkLive ? 'AHK: ON 🟢' : 'AHK: OFF 🔴'}
+                  </button>
+                  <button onClick={() => handleEdit(device)} className="px-3 py-1.5 border rounded-lg text-xs hover:bg-slate-50">Edit</button>
+                  <button onClick={() => handleDelete(device.id)} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs hover:bg-red-100">Delete</button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </main>
 
+      {/* MODAL IMPORT */}
       {showCmdModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full p-6 space-y-4">
-            <h2 className="text-xl font-bold">Paste CMD Output</h2>
-            <p className="text-sm text-slate-600">Run these commands in Windows CMD and paste the output below:</p>
-            <pre className="bg-slate-100 p-3 rounded text-xs overflow-auto max-h-40">{`wmic bios get serialnumber\nwmic csproduct get uuid\nhostname\necho %username%\nipconfig /all\nnetsh wlan show interfaces`}</pre>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-xl space-y-3">
+            <h3 className="font-bold text-lg">Paste Output CMD Windows</h3>
             <textarea
               value={cmdInput}
               onChange={(e) => setCmdInput(e.target.value)}
-              placeholder="Paste CMD output here..."
-              className="w-full h-40 p-3 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400"
+              className="w-full h-48 p-3 border rounded-xl font-mono text-xs bg-slate-50"
+              placeholder="Paste data di sini..."
             />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowCmdModal(false)} className="btn btn-outline">Cancel</button>
-              <button onClick={parseCmdOutput} className="btn btn-primary">Parse & Fill</button>
+              <button onClick={() => setShowCmdModal(false)} className="btn btn-outline text-xs">Cancel</button>
+              <button onClick={parseCmdOutput} className="btn btn-primary text-xs">Parse & Isi</button>
             </div>
           </div>
         </div>
       )}
 
-      {toast && (
-        <div className={`toast ${toast.type === 'error' ? 'toast-error' : 'toast-success'}`}>{toast.msg}</div>
-      )}
+      {toast && <div className={`toast ${toast.type === 'error' ? 'toast-error' : 'toast-success'}`}>{toast.msg}</div>}
     </div>
   );
 }
