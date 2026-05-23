@@ -1,3 +1,19 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+// Mengimport icon-icon yang digunakan di dalam component
+import { 
+  Eye, 
+  EyeOff, 
+  Wifi, 
+  WifiOff, 
+  LogOut, 
+  Plus, 
+  Copy, 
+  Download, 
+  Upload, 
+  Trash2, 
+  AlertCircle 
+} from 'lucide-react';
+
 const STORAGE_KEY = 'rh-house-devices';
 const AUTH_KEY = 'rh-auth-session';
 const PASSWORD = import.meta.env.VITE_PASSWORD || 'Taikbabi182#';
