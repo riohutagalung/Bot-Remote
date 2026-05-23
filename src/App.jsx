@@ -15,7 +15,8 @@ import {
   XCircle,
   Activity,
   Save,
-  Languages
+  Languages,
+  FileCode // Icon tambahan untuk penanda input script
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
@@ -116,7 +117,6 @@ const KAMUS_BAHASA = {
 };
 
 export default function App() {
-  // Pilihan Bahasa Default ke Indonesia (Bisa diubah kapan saja ke 'EN')
   const [bahasa, setBahasa] = useState('ID');
   const teks = KAMUS_BAHASA[bahasa];
 
@@ -131,6 +131,9 @@ export default function App() {
   const [wsTerhubung, setWsTerhubung] = useState(false);
   const [notifikasi, setNotifikasi] = useState(null);
 
+  // State Baru untuk merekam input nama file script kustom per perangkat
+  const [namaScriptInput, setNamaScriptInput] = useState({});
+
   const [dataForm, setDataForm] = useState({
     name: '', serial: '', model: '', wifi: '', ip: '', mac: ''
   });
@@ -143,7 +146,6 @@ export default function App() {
     setCekSesiSelesai(true);
   }, []);
 
-  // Memuat data dari database backend Railway (Polling aman per 5 detik, anti overload)
   const muatDataDariDatabase = async () => {
     try {
       const respon = await fetch(`${URL_HTTP}/api/devices`);
@@ -163,7 +165,6 @@ export default function App() {
     return () => clearInterval(intervalDinamis);
   }, [sudahLogin]);
 
-  // Hubungkan WebSocket secara efisien (Hanya menerima data stream tanpa membombardir server)
   useEffect(() => {
     if (!sudahLogin) return;
 
@@ -211,7 +212,6 @@ export default function App() {
     setTimeout(() => setNotifikasi(null), 3000);
   };
 
-  // Logika Menggabungkan Data Server dengan Sinyal Client.exe Real-Time
   const masterDaftarPerangkat = useMemo(() => {
     const daftarHasilGabung = [];
     const petaOnline = new Map();
@@ -244,7 +244,6 @@ export default function App() {
       });
     });
 
-    // PENGATURAN LOGIK: Jika client.exe konek tapi belum di-save ke DB, ia langsung muncul di dashboard agar bisa dikontrol langsung
     perangkatOnlineLive.forEach((live) => {
       if (!live || !live.id) return;
       const kunciLiveSerial = live.id.trim().toLowerCase();
@@ -276,16 +275,23 @@ export default function App() {
     return { total, online, offline, ahkAktif };
   }, [masterDaftarPerangkat]);
 
+  // UPDATE LOGIK: Mengirimkan parameter nama file kustom ke server backend
   const ubahStatusAhk = async (perangkat) => {
     try {
       const aksiPerintah = perangkat.ahkEnabled ? 'stop_ahk' : 'start_ahk';
+      const scriptSpesifik = namaScriptInput[perangkat.serial] || "";
+
       const respon = await fetch(`${URL_HTTP}/api/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId: perangkat.serial, command: aksiPerintah }),
+        body: JSON.stringify({ 
+          deviceId: perangkat.serial, 
+          command: aksiPerintah,
+          scriptName: scriptSpesifik // Dikirimkan agar dieksekusi client.exe secara dinamis
+        }),
       });
       if (respon.ok) {
-        tampilkanNotifikasi(`${teks.notifAhkSend} ${perangkat.name}`);
+        tampilkanNotifikasi(`${teks.notifAhkSend} ${perangkat.name} ${scriptSpesifik ? `(${scriptSpesifik})` : ''}`);
         muatDataDariDatabase();
       }
     } catch (k) {
@@ -328,13 +334,20 @@ export default function App() {
     }
   };
 
+  // UPDATE LOGIK: Mengirim password PIN_AKSES agar rute DELETE server.js tidak memblokir hapus data
   const hapusPerangkatPermanen = async (serialTarget) => {
     if (!window.confirm(teks.confirmDelete)) return;
     try {
-      const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, { method: 'DELETE' });
+      const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, { 
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: PIN_AKSES }) // Menyertakan kata sandi otorisasi cloud
+      });
       if (hapus.ok) {
         tampilkanNotifikasi(teks.notifDbDeleted);
         muatDataDariDatabase();
+      } else {
+        tampilkanNotifikasi('Unauthorized or key mismatched');
       }
     } catch (g) {
       tampilkanNotifikasi('Purge failure');
@@ -605,7 +618,25 @@ export default function App() {
                 </div>
 
                 {/* Komponen Operasi Aksi */}
-                <div className="flex items-center gap-2 w-full lg:w-auto justify-end border-t border-slate-800/60 pt-3 lg:pt-0 lg:border-t-0">
+                <div className="flex items-center gap-3 w-full lg:w-auto justify-end border-t border-slate-800/60 pt-3 lg:pt-0 lg:border-t-0">
+                  
+                  {/* INPUT DYNAMIC SCRIPT: Mengisi Nama Script Custom Sebelum Klik Nyala */}
+                  {perangkat.isOnline && !perangkat.ahkEnabled && (
+                    <div className="relative flex items-center">
+                      <FileCode className="w-3.5 h-3.5 text-slate-500 absolute left-2 pointer-events-none" />
+                      <input 
+                        type="text"
+                        placeholder="Nama_script.ahk"
+                        value={namaScriptInput[perangkat.serial] || ""}
+                        onChange={(e) => setNamaScriptInput({
+                          ...namaScriptInput,
+                          [perangkat.serial]: e.target.value
+                        })}
+                        className="bg-slate-950 text-[11px] font-mono border border-slate-800 focus:border-indigo-500 rounded-xl pl-7 pr-2 py-1.5 w-[140px] text-slate-200 focus:outline-none transition"
+                      />
+                    </div>
+                  )}
+
                   <button
                     onClick={() => ubahStatusAhk(perangkat)}
                     disabled={!perangkat.isOnline}
