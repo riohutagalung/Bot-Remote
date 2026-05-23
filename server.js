@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 
-// Konfigurasi CORS eksplisit untuk Frontend Vercel Anda
+// Konfigurasi CORS Super Longgar Khusus Frontend Vercel Anda
 app.use(cors({
   origin: [
     'https://bot-remote-iyrx.vercel.app', 
@@ -31,7 +31,9 @@ let deviceConnections = new Map();
 app.get("/", (_, res) => res.send("WebSocket backend online"));
 app.get("/ping", (_, res) => res.status(200).send("pong"));
 
-// 1. Ambil semua data laptop yang sedang online (Format FLAT agar tabel Dashboard tidak kosong)
+// ----- API ROUTES UNTUK WEB FRONTEND -----
+
+// 1. Ambil semua data laptop yang sedang online (DIBUNGKUS OBJEK 'devices' AGAR VERCEL BISA BACA)
 app.get("/api/devices", (req, res) => {
   const devicesArray = Array.from(onlineDevices.values());
   res.json({ devices: devicesArray });
@@ -51,10 +53,9 @@ app.post("/api/command", (req, res) => {
     return res.status(404).json({ error: "Laptop sedang offline atau tidak terhubung" });
   }
 
-  // Kirim sinyal instruksi ke client.cjs
   clientWs.send(JSON.stringify({
     type: "execute_command",
-    action: command // "start_ahk" atau "stop_ahk"
+    action: command 
   }));
 
   console.log(`[Web Command] Perintah '${command}' dikirim ke ${deviceId}`);
@@ -62,42 +63,47 @@ app.post("/api/command", (req, res) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`🚀 HTTP + WS server running on port ${PORT}`);
+  console.log(`HTTP + WS server running on port ${PORT}`);
 });
 
-// PROSES WEBSOCKET SERVER
+// ----- AKTIFKAN WEBSOCKET SERVER -----
 const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws) => {
   let currentDeviceId = null;
-  console.log("🔌 Ada koneksi WebSocket baru masuk...");
+  console.log("Ada koneksi WebSocket baru masuk...");
 
+  // Kirim data langsung sesaat setelah dashboard web melakukan handshake pertama
   ws.on("message", (message) => {
     try {
       const data = JSON.parse(message.toString());
 
-      // JIKA CLIENT MENDAFTARKAN DIRI / KIRIM HEARTBEAT TELEMETRI
-      if (data && data.id) {
-        const cleanId = data.id.toString().trim().toLowerCase();
+      // Validasi Fleksibel: Menerima register lama ataupun payload telemetri flat baru
+      if (data && (data.id || data.deviceId)) {
+        const rawId = data.id || data.deviceId;
+        const cleanId = rawId.toString().trim().toLowerCase();
         currentDeviceId = cleanId;
         
         deviceConnections.set(cleanId, ws);
         
-        // Simpan dengan struktur FLAT agar langsung terbaca di komponen UI Dashboard Anda
+        // Pemetaan data adaptif (Mendukung pembacaan flat row dashboard Anda)
         onlineDevices.set(cleanId, {
-          id: data.id,
+          id: rawId.toString().trim(),
+          serial: data.serial || rawId.toString().trim(),
+          name: data.hostname || data.name || "Target PC",
+          hostname: data.hostname || "Target PC",
+          model: data.model || (data.deviceInfo ? data.deviceInfo.model : "-"),
+          wifi: data.wifi || (data.deviceInfo ? data.deviceInfo.wifi : "-"),
+          ip: data.ip || (data.deviceInfo ? data.deviceInfo.ip : "-"),
+          mac: data.mac || (data.deviceInfo ? data.deviceInfo.mac : "-"),
           ahkEnabled: typeof data.ahkEnabled === 'boolean' ? data.ahkEnabled : false,
-          hostname: data.hostname || '-',
-          model: data.model || '-',
-          wifi: data.wifi || '-',
-          ip: data.ip || '-',
-          mac: data.mac || '-',
           lastSeen: new Date()
         });
 
-        console.log(`[Telemetry Sync] Device: ${cleanId} | AHK: ${data.ahkEnabled}`);
+        console.log(`[Sync Berhasil] Laptop Terdeteksi Live: ${cleanId}`);
         broadcastToWeb(); 
       }
+
     } catch (err) {
       console.error("Gagal membaca pesan WebSocket:", err.message);
     }
@@ -105,15 +111,11 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     if (currentDeviceId) {
-      console.log(`❌ [Disconnect] Laptop Offline: ${currentDeviceId}`);
+      console.log(`[Disconnect] Laptop Offline: ${currentDeviceId}`);
       deviceConnections.delete(currentDeviceId);
       onlineDevices.delete(currentDeviceId); 
       broadcastToWeb(); 
     }
-  });
-
-  ws.on("error", (err) => {
-    console.error("WebSocket Socket Error:", err.message);
   });
 });
 
@@ -131,6 +133,4 @@ function broadcastToWeb() {
   });
 }
 
-// Penyelamat dari crash global
-process.on('uncaughtException', (err) => console.error('🚨 Fatal Error:', err.message));
-process.on('unhandledRejection', (reason) => console.error('🚨 Unhandled Promise:', reason));
+process.on('uncaughtException', (err) => console.error('System bypass error:', err.message));
