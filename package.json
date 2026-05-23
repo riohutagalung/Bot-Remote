@@ -6,7 +6,7 @@
   "main": "client.cjs",
   "bin": "client.cjs",
   "scripts": {
-    "start": "node client.js"
+    "start": "node client.cjs"
   },
   "dependencies": {
     "ws": "^8.16.0"

@@ -8,14 +8,12 @@ app.use(cors());
 app.use(express.json());
 
 const server = http.createServer(app);
-// Inisialisasi server WebSocket
 const wss = new WebSocket.Server({ server });
 
 // DATABASE UTAMA (In-Memory Simulation)
-// Data terdaftar permanen sebelum server restart/deploy ulang
 let databasePerangkat = [];
 
-// TEMPAT PENYIMPANAN TELEMETRI REAL-TIME (Client.exe yang sedang aktif)
+// TEMPAT PENYIMPANAN TELEMETRI REAL-TIME
 let klienOnlineLive = new Map();
 
 // ==========================================
@@ -23,10 +21,15 @@ let klienOnlineLive = new Map();
 // ==========================================
 function kirimUpdateKeSemuaDashboard() {
   try {
+    // Dipetakan rata (flat object) agar bersesuaian dengan UI Dashboard
     const daftarDevicesLive = Array.from(klienOnlineLive.values()).map(p => ({
       id: p.id || '',
       ahkEnabled: p.ahkEnabled || false,
-      info: p.info || { hostname: '-', model: '-', wifi: '-', ip: '-', mac: '-' }
+      hostname: p.hostname || '-',
+      model: p.model || '-',
+      wifi: p.wifi || '-',
+      ip: p.ip || '-',
+      mac: p.mac || '-'
     }));
 
     const payload = JSON.stringify({
@@ -35,7 +38,6 @@ function kirimUpdateKeSemuaDashboard() {
     });
 
     wss.clients.forEach((client) => {
-      // Pastikan hanya mengirim ke koneksi WebSocket yang benar-benar terbuka
       if (client && client.readyState === WebSocket.OPEN) {
         client.send(payload);
       }
@@ -50,34 +52,27 @@ function kirimUpdateKeSemuaDashboard() {
 // ==========================================
 wss.on('connection', (ws) => {
   console.log('🔌 Seseorang terhubung (Dashboard Web atau Client.exe)');
-
-  // Kirim data yang ada saat ini begitu ada koneksi baru masuk
   kirimUpdateKeSemuaDashboard();
 
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
 
-      // VALIDASI AMAN: Pastikan ini adalah paket data valid dari client.exe
       if (data && data.id) {
         const deviceId = data.id.toString().trim().toLowerCase();
         
-        // Daftarkan atau perbarui status live di memori server
         klienOnlineLive.set(deviceId, {
           id: data.id.toString().trim(),
           ahkEnabled: typeof data.ahkEnabled === 'boolean' ? data.ahkEnabled : false,
-          info: {
-            hostname: data.hostname || data.name || 'Windows Client',
-            model: data.model || '-',
-            wifi: data.wifi || '-',
-            ip: data.ip || '-',
-            mac: data.mac || '-'
-          },
-          wsInstance: ws, // Simpan referensi websocket milik client.exe ini
+          hostname: data.hostname || 'Windows Client',
+          model: data.model || '-',
+          wifi: data.wifi || '-',
+          ip: data.ip || '-',
+          mac: data.mac || '-',
+          wsInstance: ws, 
           lastSeen: Date.now()
         });
 
-        // Informasikan perubahan data terbaru ke Web Dashboard
         kirimUpdateKeSemuaDashboard();
       }
     } catch (err) {
@@ -87,7 +82,6 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     try {
-      // Bersihkan client.exe dari daftar online jika koneksinya putus
       for (let [id, perangkat] of klienOnlineLive.entries()) {
         if (perangkat && perangkat.wsInstance === ws) {
           klienOnlineLive.delete(id);
@@ -101,7 +95,6 @@ wss.on('connection', (ws) => {
     }
   });
 
-  // Cegah server crash akibat error koneksi mentah dari browser/client
   ws.on('error', (err) => {
     console.error('🔥 WebSocket Socket Error:', err.message);
     try {
@@ -110,7 +103,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Penyelamat Utama: Cegah Node.js mati jika ada error global tak terduga
 process.on('uncaughtException', (err) => {
   console.error('🚨 ERROR FATAL DIALAMI SERVER (Tetap Bertahan):', err.message);
 });
@@ -123,12 +115,10 @@ process.on('unhandledRejection', (reason, promise) => {
 // REST API ENDPOINTS (HTTP PROTOCOL)
 // ==========================================
 
-// Ambil semua data dari database
 app.get('/api/devices', (req, res) => {
   res.json({ devices: databasePerangkat });
 });
 
-// Simpan perangkat secara permanen ke database
 app.post('/api/devices', (req, res) => {
   try {
     const { serial, name, model, wifi, ip, mac } = req.body;
@@ -159,7 +149,6 @@ app.post('/api/devices', (req, res) => {
   }
 });
 
-// Edit entri data perangkat
 app.put('/api/devices/:id', (req, res) => {
   try {
     const targetSerial = req.params.id.toString().trim().toLowerCase();
@@ -176,7 +165,6 @@ app.put('/api/devices/:id', (req, res) => {
   }
 });
 
-// Hapus perangkat dari database pusat
 app.delete('/api/devices/:id', (req, res) => {
   try {
     const targetSerial = req.params.id.toString().trim().toLowerCase();
@@ -187,19 +175,15 @@ app.delete('/api/devices/:id', (req, res) => {
   }
 });
 
-// Saluran Eksekusi Perintah START/STOP AHK ke client.exe
 app.post('/api/command', (req, res) => {
   try {
-    const { deviceId, command } = req.body; // command: 'start_ahk' atau 'stop_ahk'
+    const { deviceId, command } = req.body; 
     if (!deviceId) return res.status(400).json({ error: 'Device ID required' });
 
     const targetKlien = klienOnlineLive.get(deviceId.toString().trim().toLowerCase());
 
     if (targetKlien && targetKlien.wsInstance && targetKlien.wsInstance.readyState === WebSocket.OPEN) {
-      // Kirim string instruksi langsung ke websocket client.exe target
       targetKlien.wsInstance.send(JSON.stringify({ action: command }));
-      
-      // Sinkronkan status di server memori
       targetKlien.ahkEnabled = (command === 'start_ahk');
       kirimUpdateKeSemuaDashboard();
 
@@ -212,7 +196,6 @@ app.post('/api/command', (req, res) => {
   }
 });
 
-// Bulk Import Database Schema
 app.post('/api/devices/import', (req, res) => {
   const { devices } = req.body;
   if (Array.isArray(devices)) {
@@ -223,9 +206,6 @@ app.post('/api/devices/import', (req, res) => {
   }
 });
 
-// ==========================================
-// RUNTIME PORT ASSIGNMENT
-// ==========================================
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   console.log(`🚀 Master Engine Server operating safely on port: ${PORT}`);

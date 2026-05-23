@@ -84,14 +84,12 @@ function controlAutoHotkey(action) {
     if (action === "start") {
       command = `"C:\\Program Files\\AutoHotkey\\AutoHotkey.exe" "${path.join(__dirname, "script.ahk")}"`;
     } else if (action === "stop") {
-      // Ditambahkan '|| exit 0' supaya jika AHK belum jalan, taskkill tidak melempar error crash ke Node.js
       command = "taskkill /f /im AutoHotkey.exe || exit 0";
     } else {
       return resolve();
     }
 
     exec(command, (error) => {
-      // Apapun hasilnya (sukses/tidak), kita resolve agar pipe data telemetri tidak tersumbat
       resolve();
     });
   });
@@ -101,12 +99,9 @@ function connectToServer() {
   const ws = new WebSocket(SERVER_URL);
   let intervalPingTelemetri;
 
-  // Fungsi kirim data telemetri yang sesuai dengan keinginan backend baru
   const kirimSinyalTelemetri = () => {
     if (ws.readyState === WebSocket.OPEN) {
       const info = getSystemInfo();
-      
-      // Menggunakan Serial Number asli BIOS sebagai ID Utama (lebih mudah dilacak di DB)
       const cleanId = info.serial.replace(/[^\w-]/g, "_");
 
       const payload = {
@@ -124,12 +119,8 @@ function connectToServer() {
   };
 
   ws.on("open", () => {
-    console.log("Connected to server");
-    
-    // Kirim data telemetri pertama saat berhasil konek
+    console.log("Connected to server successfully");
     kirimSinyalTelemetri();
-
-    // Lakukan rutinitas heartbeat kirim data telemetri tiap 10 detik agar status di dashboard tetap "LIVE"
     intervalPingTelemetri = setInterval(kirimSinyalTelemetri, 10000);
   });
 
@@ -137,18 +128,13 @@ function connectToServer() {
     try {
       const data = JSON.parse(message.toString());
 
-      // Mencocokkan skema kontrol backend: data.action ('start_ahk' / 'stop_ahk')
       if (data && data.action) {
         console.log("Menerima perintah sinyal:", data.action);
-        
         const targetAksi = data.action === "start_ahk" ? "start" : "stop";
         
         controlAutoHotkey(targetAksi).then(() => {
-          // Update local status
           statusAhkSaatIni = (targetAksi === "start");
           console.log(`Status Engine AHK sekarang: ${statusAhkSaatIni ? "NYALA" : "MATI"}`);
-          
-          // Langsung kirim balik kondisi terbaru ke backend agar UI Dashboard langsung berubah
           kirimSinyalTelemetri();
         });
       }
