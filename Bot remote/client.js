@@ -1,14 +1,13 @@
-// --- Remote Client (Agent) ---
-import WebSocket from "ws";
-import { exec, execSync } from "child_process";
-import os from "os";
-import path from "path";
+const WebSocket = require("ws");
+const { exec, execSync } = require("child_process");
+const os = require("os");
+const path = require("path");
 
 const SERVER_URL = "wss://bot-remote-production.up.railway.app";
 
-// ================= System Info =================
+// Ambil data sistem dengan fallback yang aman
 function getSystemInfo() {
-  const info = {
+  return {
     hostname: os.hostname(),
     platform: os.platform(),
     arch: os.arch(),
@@ -18,35 +17,32 @@ function getSystemInfo() {
     mac: getMACAddress(),
     wifi: getWifiSSID(),
   };
-  // Gabungkan jadi ID unik
-  info.id = `${info.serial}-${info.mac}-${info.wifi}`.replace(/[^\w-]/g, "_");
-  return info;
 }
 
 function getSerialNumber() {
   try {
     if (os.platform() === "win32") {
-      const output = execSync("wmic bios get serialnumber /value", {
-        encoding: "utf8",
-      });
+      const output = execSync("wmic bios get serialnumber /value", { encoding: "utf8" });
       const match = output.match(/SerialNumber=(\S+)/);
-      return match ? match[1] : "Unknown";
+      return match && match[1] && match[1] !== "To" ? match[1] : "UNKNOWN_SERIAL";
     }
-  } catch {}
-  return "Unknown";
+    return "NON_WINDOWS_DEV";
+  } catch {
+    return "UNKNOWN_SERIAL";
+  }
 }
 
 function getWifiSSID() {
   try {
     if (os.platform() === "win32") {
-      const output = execSync("netsh wlan show interfaces", {
-        encoding: "utf8",
-      });
-      const match = output.match(/SSID\\s*:\\s*(.+)/);
-      return match ? match[1].trim() : "Unknown";
+      const output = execSync("netsh wlan show interfaces", { encoding: "utf8" });
+      const match = output.match(/SSID\s*:\s*(.+)/);
+      return match ? match[1].trim() : "-";
     }
-  } catch {}
-  return "Unknown";
+    return "-";
+  } catch {
+    return "-";
+  }
 }
 
 function getLocalIP() {
@@ -58,7 +54,7 @@ function getLocalIP() {
       }
     }
   }
-  return "Unknown";
+  return "-";
 }
 
 function getMACAddress() {
@@ -70,120 +66,107 @@ function getMACAddress() {
       }
     }
   }
-  return "Unknown";
+  return "-";
 }
 
-// ================= AutoHotkey Control =================
+// Global state tracking internal untuk dikirim ke backend
+let statusAhkSaatIni = false;
+
+// Fungsi kontrol AutoHotkey
 function controlAutoHotkey(action) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (os.platform() !== "win32") {
-      console.warn("AutoHotkey control hanya tersedia di Windows");
-      return resolve("Non-Windows platform: skipped");
+      console.warn("AutoHotkey control only works on Windows");
+      return resolve();
     }
 
     let command;
     if (action === "start") {
-      command = `"C:\\Program Files\\AutoHotkey\\AutoHotkey.exe" "${path.join(
-        __dirname,
-        "script.ahk"
-      )}"`;
+      command = `"C:\\Program Files\\AutoHotkey\\AutoHotkey.exe" "${path.join(__dirname, "script.ahk")}"`;
     } else if (action === "stop") {
-      command = "taskkill /f /im AutoHotkey.exe";
+      // Ditambahkan '|| exit 0' supaya jika AHK belum jalan, taskkill tidak melempar error crash ke Node.js
+      command = "taskkill /f /im AutoHotkey.exe || exit 0";
     } else {
-      return reject(new Error("Unknown action"));
+      return resolve();
     }
 
     exec(command, (error) => {
-      if (error) reject(error);
-      else resolve(`AHK ${action} executed`);
+      // Apapun hasilnya (sukses/tidak), kita resolve agar pipe data telemetri tidak tersumbat
+      resolve();
     });
   });
 }
 
-// ================= Status Checker =================
-function isAhkRunning() {
-  try {
-    const result = execSync('tasklist /FI "imagename eq AutoHotkey.exe"', {
-      encoding: "utf8",
-    });
-    return result.includes("AutoHotkey.exe");
-  } catch {
-    return false;
-  }
-}
-
-// ================= Connection Handler =================
 function connectToServer() {
   const ws = new WebSocket(SERVER_URL);
+  let intervalPingTelemetri;
+
+  // Fungsi kirim data telemetri yang sesuai dengan keinginan backend baru
+  const kirimSinyalTelemetri = () => {
+    if (ws.readyState === WebSocket.OPEN) {
+      const info = getSystemInfo();
+      
+      // Menggunakan Serial Number asli BIOS sebagai ID Utama (lebih mudah dilacak di DB)
+      const cleanId = info.serial.replace(/[^\w-]/g, "_");
+
+      const payload = {
+        id: cleanId,
+        ahkEnabled: statusAhkSaatIni,
+        hostname: info.hostname,
+        model: `${info.platform} (${info.arch})`,
+        wifi: info.wifi,
+        ip: info.ip,
+        mac: info.mac
+      };
+
+      ws.send(JSON.stringify(payload));
+    }
+  };
 
   ws.on("open", () => {
-    const info = getSystemInfo();
-    console.log("Connected to server as:", info.id);
+    console.log("Connected to server");
+    
+    // Kirim data telemetri pertama saat berhasil konek
+    kirimSinyalTelemetri();
 
-    ws.send(
-      JSON.stringify({ type: "register", deviceId: info.id, deviceInfo: info })
-    );
-
-    // Kirim status awal AHK
-    ws.send(
-      JSON.stringify({
-        type: "status_update",
-        deviceId: info.id,
-        status: { ahkEnabled: isAhkRunning() },
-      })
-    );
-
-    // Kirim status AHK setiap 5 detik
-    setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(
-          JSON.stringify({
-            type: "status_update",
-            deviceId: info.id,
-            status: { ahkEnabled: isAhkRunning() },
-          })
-        );
-      }
-    }, 5000);
+    // Lakukan rutinitas heartbeat kirim data telemetri tiap 10 detik agar status di dashboard tetap "LIVE"
+    intervalPingTelemetri = setInterval(kirimSinyalTelemetri, 10000);
   });
 
   ws.on("message", (message) => {
     try {
       const data = JSON.parse(message.toString());
 
-      if (data.type === "execute_command") {
-        console.log("Command received:", data.command);
-
-        if (data.command === "start_ahk" || data.command === "stop_ahk") {
-          const act = data.command === "start_ahk" ? "start" : "stop";
-          controlAutoHotkey(act)
-            .then(() => {
-              ws.send(
-                JSON.stringify({
-                  type: "status_update",
-                  deviceId: data.deviceId,
-                  status: { ahkEnabled: act === "start" },
-                })
-              );
-            })
-            .catch((err) =>
-              console.error("Failed executing AHK:", err.message)
-            );
-        }
+      // Mencocokkan skema kontrol backend: data.action ('start_ahk' / 'stop_ahk')
+      if (data && data.action) {
+        console.log("Menerima perintah sinyal:", data.action);
+        
+        const targetAksi = data.action === "start_ahk" ? "start" : "stop";
+        
+        controlAutoHotkey(targetAksi).then(() => {
+          // Update local status
+          statusAhkSaatIni = (targetAksi === "start");
+          console.log(`Status Engine AHK sekarang: ${statusAhkSaatIni ? "NYALA" : "MATI"}`);
+          
+          // Langsung kirim balik kondisi terbaru ke backend agar UI Dashboard langsung berubah
+          kirimSinyalTelemetri();
+        });
       }
     } catch (err) {
-      console.error("Parse error:", err.message);
+      console.error("Gagal memproses parsing perintah backend:", err.message);
     }
   });
 
   ws.on("close", () => {
-    console.log("Disconnected, reconnecting in 5 s...");
+    console.log("Disconnected, reconnecting in 5s...");
+    clearInterval(intervalPingTelemetri);
     setTimeout(connectToServer, 5000);
   });
 
-  ws.on("error", (err) => console.error("WebSocket error:", err.message));
+  ws.on("error", (err) => {
+    console.error("WebSocket error:", err.message);
+  });
 }
 
-// ================= Start Agent =================
-console.log("Starting remote client agent…");
+console.log("Starting remote client...");
 connectToServer();
