@@ -77,7 +77,10 @@ app.get("/api/devices", (req, res) => {
   res.json({ devices: devicesArray });
 });
 
+// ====================================================================================
 // 2. API UNTUK MENGHAPUS LAPTOP DENGAN VERIFIKASI HEADER TOKEN (AMAN 100%)
+// PERBAIKAN: Menambahkan fallback check jika parameter yang dikirim berupa serial/id string
+// ====================================================================================
 app.delete("/api/devices/:id", (req, res) => {
   const { id } = req.params;
   
@@ -88,14 +91,26 @@ app.delete("/api/devices/:id", (req, res) => {
   }
 
   const cleanId = id.toString().trim().toLowerCase();
+  
+  // Cari target penghapusan baik berdasarkan Key ID utama ataupun property Serial di dalamnya
+  let targetKey = null;
   if (savedDevices[cleanId]) {
-    delete savedDevices[cleanId];
+    targetKey = cleanId;
+  } else {
+    // Fallback lookup: Cari secara dinamis jika App.jsx melempar serial key mentah
+    targetKey = Object.keys(savedDevices).find(key => 
+      savedDevices[key].serial && savedDevices[key].serial.toString().trim().toLowerCase() === cleanId
+    );
+  }
+
+  if (targetKey && savedDevices[targetKey]) {
+    delete savedDevices[targetKey];
     saveCloudData(savedDevices); // Hapus permanen dari cloud data
     
     // Putus hubungan jika perangkat sedang online
-    if (deviceConnections.has(cleanId)) {
-      deviceConnections.get(cleanId).close();
-      deviceConnections.delete(cleanId);
+    if (deviceConnections.has(targetKey)) {
+      deviceConnections.get(targetKey).close();
+      deviceConnections.delete(targetKey);
     }
     
     broadcastToWeb();
