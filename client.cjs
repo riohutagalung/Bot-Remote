@@ -2,8 +2,11 @@ const WebSocket = require("ws");
 const { exec, execSync } = require("child_process");
 const os = require("os");
 const path = require("path");
+const fs = require("fs"); // Menambahkan File System bawaan
 
 const SERVER_URL = "wss://bot-remote-production.up.railway.app";
+// Ambil folder tempat client.exe dijalankan secara dinamis
+const CURRENT_DIR = process.pkg ? path.dirname(process.execPath) : __dirname;
 
 function getSystemInfo() {
   return {
@@ -64,24 +67,41 @@ let statusAhkSaatIni = false;
 let wsGlobal = null;
 
 // ==========================================================
-// KONTROL BALIK LAYAR: JALANKAN / MATIKAN VIA PROSES KERNEL WINDOWS
+// KONTROL OTOMATIS: MENCARI FILE AHK SECARA DINAMIS
 // ==========================================================
-function kendalikanAhkBalikLayar(aksi) {
+function kendalikanAhkBalikLayar(aksi, namaScriptKustom = "") {
   return new Promise((resolve) => {
     if (os.platform() !== "win32") return resolve();
 
     let cmd = "";
     if (aksi === "start") {
-      // Menjalankan langsung script.ahk dari foldernya (Sama seperti double-click / F3)
-      cmd = `start "" "script.ahk"`;
+      let fileTarget = namaScriptKustom;
+
+      // Jika web tidak mengirim nama script spesifik, cari file .ahk pertama di folder
+      if (!fileTarget) {
+        try {
+          const files = fs.readdirSync(CURRENT_DIR);
+          const ahkFiles = files.filter(f => f.toLowerCase().endsWith(".ahk"));
+          if (ahkFiles.length > 0) {
+            fileTarget = ahkFiles[0]; // Ambil file AHK pertama yang ditemukan
+          }
+        } catch (e) { console.error("Gagal membaca folder script:", e.message); }
+      }
+
+      if (fileTarget) {
+        const fullScriptPath = path.join(CURRENT_DIR, fileTarget);
+        // Jalankan menggunakan absolute path agar Windows pasti menemukannya di balik layar
+        cmd = `start "" "${fullScriptPath}"`;
+        console.log(`[Dynamic Exec] Menjalankan script: ${fullScriptPath}`);
+      } else {
+        console.log("[Alert] Tidak ada file .ahk ditemukan di folder ini!");
+        return resolve();
+      }
     } else if (aksi === "stop") {
-      // Membunuh proses AutoHotkey sampai bersih (Sama seperti F8)
       cmd = `taskkill /f /im AutoHotkey.exe || exit 0`;
     }
 
-    console.log(`[Executing Kernel Command]: ${cmd}`);
     exec(cmd, () => {
-      // Beri jeda 1 detik agar Windows memperbarui Task Manager, lalu cek status terbaru
       setTimeout(() => {
         periksaStatusAktifWindows();
         resolve();
@@ -90,7 +110,6 @@ function kendalikanAhkBalikLayar(aksi) {
   });
 }
 
-// PEMANTAU REAL-TIME: Selalu cek apakah AutoHotkey.exe ada di background
 function periksaStatusAktifWindows() {
   if (os.platform() !== "win32") return;
 
@@ -102,7 +121,6 @@ function periksaStatusAktifWindows() {
     
     if (statusAhkSaatIni !== sedangJalan) {
       statusAhkSaatIni = sedangJalan;
-      console.log(`[Sync] Status AHK Berubah -> Menyala/Standby: ${statusAhkSaatIni}`);
       paksaKirimTelemetri();
     }
   });
@@ -135,10 +153,7 @@ function connectToServer() {
   ws.on("open", () => {
     console.log("✔ Connected to remote server safely");
     periksaStatusAktifWindows();
-    
-    // Ping telemetri setiap 10 detik
     intervalPingTelemetri = setInterval(paksaKirimTelemetri, 10000); 
-    // Cek kondisi real-time Task Manager setiap 3 detik (Biar responsif saat F8 dipencet manual)
     intervalCekTasklist = setInterval(periksaStatusAktifWindows, 3000);
   });
 
@@ -146,10 +161,9 @@ function connectToServer() {
     try {
       const data = JSON.parse(message.toString());
       if (data && data.type === "execute_command" && data.action) {
-        console.log("Menerima instruksi Web:", data.action);
-        
+        // Mendukung penembakan nama script spesifik dari Web jika ada data.scriptName
         if (data.action === "start_ahk") {
-          kendalikanAhkBalikLayar("start");
+          kendalikanAhkBalikLayar("start", data.scriptName || "");
         } else if (data.action === "stop_ahk") {
           kendalikanAhkBalikLayar("stop");
         }
@@ -166,5 +180,5 @@ function connectToServer() {
   ws.on("error", () => {});
 }
 
-console.log("Starting remote client (Expert Edition)...");
+console.log("Starting remote client (Modular Dynamic Edition)...");
 connectToServer();
