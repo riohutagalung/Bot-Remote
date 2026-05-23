@@ -70,6 +70,9 @@ function getMACAddress() {
 
 let statusAhkSaatIni = false;
 
+// =======================================================
+// PERBAIKAN LOGIKA UTAMA EKSEKUSI PERINTAH WINDOWS
+// =======================================================
 function controlAutoHotkey(action) {
   return new Promise((resolve) => {
     if (os.platform() !== "win32") {
@@ -79,14 +82,22 @@ function controlAutoHotkey(action) {
 
     let command;
     if (action === "start") {
-      command = `"C:\\Program Files\\AutoHotkey\\AutoHotkey.exe" "${path.join(__dirname, "script.ahk")}"`;
+      // Menggunakan process.cwd() agar aman saat dicompile jadi exe (mencari file di folder luar, bukan di internal virtual pkg)
+      const scriptPath = path.join(process.cwd(), "script.ahk");
+      command = `"C:\\Program Files\\AutoHotkey\\AutoHotkey.exe" "${scriptPath}"`;
     } else if (action === "stop") {
-      command = "taskkill /f /im AutoHotkey.exe || exit 0";
+      // Ditambahkan /f (force) dan /t (tree) agar mematikan sub-proses AHK secara tuntas
+      command = "taskkill /f /t /im AutoHotkey.exe || exit 0";
     } else {
       return resolve();
     }
 
-    exec(command, (error) => {
+    console.log(`[Executing Shell Command]: ${command}`);
+
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`[Exec Error]: ${error.message}`);
+      }
       resolve();
     });
   });
@@ -101,7 +112,6 @@ function connectToServer() {
       const info = getSystemInfo();
       const cleanId = info.serial.replace(/[^\w-]/g, "_");
 
-      // Payload flat yang dikirim ke server.js
       const payload = {
         id: cleanId,
         ahkEnabled: statusAhkSaatIni,
@@ -119,14 +129,13 @@ function connectToServer() {
   ws.on("open", () => {
     console.log("✔ Connected to remote server safely");
     kirimSinyalTelemetri();
-    intervalPingTelemetri = setInterval(kirimSinyalTelemetri, 10000); // Sinkronisasi berkala setiap 10 detik
+    intervalPingTelemetri = setInterval(kirimSinyalTelemetri, 10000); 
   });
 
   ws.on("message", (message) => {
     try {
       const data = JSON.parse(message.toString());
 
-      // Menangkap eksekusi perintah dari server.js baru
       if (data && data.type === "execute_command" && data.action) {
         console.log("Menerima instruksi aksi:", data.action);
         const targetAksi = data.action === "start_ahk" ? "start" : "stop";
@@ -134,7 +143,7 @@ function connectToServer() {
         controlAutoHotkey(targetAksi).then(() => {
           statusAhkSaatIni = (targetAksi === "start");
           console.log(`Status Engine AHK sekarang: ${statusAhkSaatIni ? "NYALA" : "MATI"}`);
-          kirimSinyalTelemetri(); // kabari server secepatnya setelah status berubah
+          kirimSinyalTelemetri(); 
         });
       }
     } catch (err) {
