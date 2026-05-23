@@ -1,199 +1,140 @@
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const cors = require('cors');
+import express from "express";
+import { WebSocketServer } from "ws";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const PORT = process.env.PORT || 8080;
 
-let databasePerangkat = [];
+// DATABASE SEMENTARA (Disimpan di Memori Server)
+// Menyimpan data laptop yang sedang aktif/online
+let onlineDevices = new Map(); 
 
-let klienOnlineLive = new Map();
+// Menyimpan koneksi WebSocket berdasarkan deviceId agar bisa dikontrol balik
+let deviceConnections = new Map();
 
-function kirimUpdateKeSemuaDashboard() {
-  try {
-    const daftarDevicesLive = Array.from(klienOnlineLive.values()).map(p => ({
-      id: p.id || '',
-      ahkEnabled: p.ahkEnabled || false,
-      hostname: p.hostname || '-',
-      model: p.model || '-',
-      wifi: p.wifi || '-',
-      ip: p.ip || '-',
-      mac: p.mac || '-'
-    }));
+// Endpoint untuk cek status backend
+app.get("/", (_, res) => res.send("WebSocket backend online"));
+app.get("/ping", (_, res) => res.status(200).send("pong"));
 
-    const payload = JSON.stringify({
-      type: 'device_list',
-      devices: daftarDevicesLive
-    });
+// ----- API ROUTES UNTUK WEB FRONTEND -----
 
-    wss.clients.forEach((client) => {
-      if (client && client.readyState === WebSocket.OPEN) {
-        client.send(payload);
-      }
-    });
-  } catch (err) {
-    console.error('⚠️ Gagal melakukan broadcast ke dashboard:', err.message);
+// 1. Ambil semua data laptop yang sedang online
+app.get("/api/devices", (req, res) => {
+  const devicesArray = Array.from(onlineDevices.values());
+  res.json(devicesArray);
+});
+
+// 2. Kirim perintah ON/OFF AutoHotkey dari Web ke Laptop tertentu
+app.post("/api/command", (req, res) => {
+  const { deviceId, command } = req.body || {};
+  
+  if (!deviceId || !command) {
+    return res.status(400).json({ error: "Device ID and command required" });
   }
-}
 
-wss.on('connection', (ws) => {
-  console.log('🔌 Seseorang terhubung (Dashboard Web atau Client.exe)');
-  kirimUpdateKeSemuaDashboard();
+  // Cari koneksi WebSocket milik laptop tersebut
+  const clientWs = deviceConnections.get(deviceId);
 
-  ws.on('message', (message) => {
+  if (!clientWs || clientWs.readyState !== 1) { // 1 berarti OPEN
+    return res.status(404).json({ error: "Laptop sedang offline atau tidak terhubung" });
+  }
+
+  // Kirim perintah langsung ke client.exe lewat WebSocket
+  clientWs.send(JSON.stringify({
+    type: "execute_command",
+    deviceId: deviceId,
+    command: command // "start_ahk" atau "stop_ahk"
+  }));
+
+  console.log(`[Web Command] Perintah '${command}' dikirim ke ${deviceId}`);
+  res.json({ success: true, message: `Command '${command}' forwarded to device.` });
+});
+
+
+// ----- JALANKAN SERVER -----
+const server = app.listen(PORT, () => {
+  console.log(`HTTP + WS server running on port ${PORT}`);
+});
+
+
+// ----- AKTIFKAN WEBSOCKET SERVER -----
+const wss = new WebSocketServer({ server });
+
+wss.on("connection", (ws) => {
+  let currentDeviceId = null;
+
+  console.log("Ada koneksi WebSocket baru masuk...");
+
+  // Mendengarkan data yang dikirim oleh client.exe atau Web Frontend
+  ws.on("message", (message) => {
     try {
-      const data = JSON.parse(message);
+      const data = JSON.parse(message.toString());
 
-      if (data && data.id) {
-        const deviceId = data.id.toString().trim().toLowerCase();
+      // JIKA CLIENT.EXE MENDAFTARKAN DIRI (LAPTOP ONLINE)
+      if (data.type === "register") {
+        currentDeviceId = data.deviceId;
         
-        klienOnlineLive.set(deviceId, {
-          id: data.id.toString().trim(),
-          ahkEnabled: typeof data.ahkEnabled === 'boolean' ? data.ahkEnabled : false,
-          hostname: data.hostname || 'Windows Client',
-          model: data.model || '-',
-          wifi: data.wifi || '-',
-          ip: data.ip || '-',
-          mac: data.mac || '-',
-          wsInstance: ws, 
-          lastSeen: Date.now()
+        // Simpan koneksi ws dan data info laptopnya
+        deviceConnections.set(currentDeviceId, ws);
+        onlineDevices.set(currentDeviceId, {
+          id: data.deviceId,
+          info: data.deviceInfo,
+          ahkEnabled: false, // default mati saat baru connect
+          lastSeen: new Date()
         });
 
-        kirimUpdateKeSemuaDashboard();
+        console.log(`[Register] Laptop Online: ${currentDeviceId}`);
+        broadcastToWeb(); // Beritahu web secara real-time
       }
-    } catch (err) {
-      console.error('❌ Gagal memproses data masuk (Paket Rusak):', err.message);
-    }
-  });
 
-  ws.on('close', () => {
-    try {
-      for (let [id, perangkat] of klienOnlineLive.entries()) {
-        if (perangkat && perangkat.wsInstance === ws) {
-          klienOnlineLive.delete(id);
-          console.log(`❌ Perangkat [${id}] memutus koneksi.`);
-          break;
+      // JIKA CLIENT.EXE MEMBERIKAN LAPORAN STATUS AHK SETELAH DI-KLIK
+      if (data.type === "status_update") {
+        if (onlineDevices.has(data.deviceId)) {
+          const device = onlineDevices.get(data.deviceId);
+          device.ahkEnabled = data.status.ahkEnabled; // update status true/false
+          device.lastSeen = new Date();
+          onlineDevices.set(data.deviceId, device);
+
+          console.log(`[Status Update] ${data.deviceId} -> AHK Enabled: ${data.status.ahkEnabled}`);
+          broadcastToWeb(); // Beritahu web secara real-time
         }
       }
-      kirimUpdateKeSemuaDashboard();
+
     } catch (err) {
-      console.error('⚠️ Gagal membersihkan sesi koneksi tutup:', err.message);
+      console.error("Gagal membaca pesan WebSocket:", err.message);
     }
   });
 
-  ws.on('error', (err) => {
-    console.error('🔥 WebSocket Socket Error:', err.message);
-    try {
-      ws.close();
-    } catch (e) {}
+  // JIKA LAPTOP / CLIENT.EXE TERPUTUS (CLOSED)
+  ws.on("close", () => {
+    if (currentDeviceId) {
+      console.log(`[Disconnect] Laptop Offline: ${currentDeviceId}`);
+      deviceConnections.delete(currentDeviceId);
+      onlineDevices.delete(currentDeviceId); // Hapus dari daftar online
+      broadcastToWeb(); // Beritahu web kalau laptop sudah offline
+    }
   });
 });
 
-process.on('uncaughtException', (err) => {
-  console.error('🚨 ERROR FATAL DIALAMI SERVER (Tetap Bertahan):', err.message);
-});
+// Fungsi otomatis untuk menyebarkan (broadcast) data terbaru ke semua Web Frontend yang nempel
+function broadcastToWeb() {
+  const devicesArray = Array.from(onlineDevices.values());
+  const payload = JSON.stringify({
+    type: "device_list",
+    devices: devicesArray
+  });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('🚨 REJEKSI PROMISE TIDAK TERTANGANI:', reason);
-});
-
-app.get('/api/devices', (req, res) => {
-  res.json({ devices: databasePerangkat });
-});
-
-app.post('/api/devices', (req, res) => {
-  try {
-    const { serial, name, model, wifi, ip, mac } = req.body;
-    if (!serial) return res.status(400).json({ error: 'Serial is required' });
-
-    const kunciSerial = serial.toString().trim().toLowerCase();
-    const indeksAman = databasePerangkat.findIndex(p => p.serial.toString().trim().toLowerCase() === kunciSerial);
-    
-    const dataBaru = { 
-      serial: serial.toString().trim(), 
-      name: name || 'Laptop Target', 
-      model: model || '-', 
-      wifi: wifi || '-', 
-      ip: ip || '-', 
-      mac: mac || '-', 
-      ahkEnabled: false 
-    };
-
-    if (indeksAman > -1) {
-      databasePerangkat[indeksAman] = { ...databasePerangkat[indeksAman], ...dataBaru };
-    } else {
-      databasePerangkat.push(dataBaru);
+  wss.clients.forEach((client) => {
+    if (client.readyState === 1) {
+      client.send(payload);
     }
-
-    res.json({ success: true, message: 'Device locked to cloud master' });
-  } catch (e) {
-    res.status(500).json({ error: 'Internal transaction error' });
-  }
-});
-
-app.put('/api/devices/:id', (req, res) => {
-  try {
-    const targetSerial = req.params.id.toString().trim().toLowerCase();
-    const indeks = databasePerangkat.findIndex(p => p.serial.toString().trim().toLowerCase() === targetSerial);
-    
-    if (indeks > -1) {
-      databasePerangkat[indeks] = { ...databasePerangkat[indeks], ...req.body };
-      res.json({ success: true });
-    } else {
-      res.status(404).json({ error: 'Device record not found' });
-    }
-  } catch (e) {
-    res.status(500).json({ error: 'Mutation error' });
-  }
-});
-
-app.delete('/api/devices/:id', (req, res) => {
-  try {
-    const targetSerial = req.params.id.toString().trim().toLowerCase();
-    databasePerangkat = databasePerangkat.filter(p => p.serial.toString().trim().toLowerCase() !== targetSerial);
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: 'Deletion error' });
-  }
-});
-
-app.post('/api/command', (req, res) => {
-  try {
-    const { deviceId, command } = req.body; 
-    if (!deviceId) return res.status(400).json({ error: 'Device ID required' });
-
-    const targetKlien = klienOnlineLive.get(deviceId.toString().trim().toLowerCase());
-
-    if (targetKlien && targetKlien.wsInstance && targetKlien.wsInstance.readyState === WebSocket.OPEN) {
-      targetKlien.wsInstance.send(JSON.stringify({ action: command }));
-      targetKlien.ahkEnabled = (command === 'start_ahk');
-      kirimUpdateKeSemuaDashboard();
-
-      return res.json({ success: true, message: 'Signal successfully deployed' });
-    }
-
-    res.status(404).json({ error: 'Device node is currently offline' });
-  } catch (e) {
-    res.status(500).json({ error: 'Command dispatch system error' });
-  }
-});
-
-app.post('/api/devices/import', (req, res) => {
-  const { devices } = req.body;
-  if (Array.isArray(devices)) {
-    databasePerangkat = devices;
-    res.json({ success: true });
-  } else {
-    res.status(400).json({ error: 'Invalid data format' });
-  }
-});
-
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-  console.log(`🚀 Master Engine Server operating safely on port: ${PORT}`);
-});
+  });
+}
