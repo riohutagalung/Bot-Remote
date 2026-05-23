@@ -1,7 +1,7 @@
-import WebSocket from "ws";
-import { exec, execSync } from "child_process";
-import os from "os";
-import path from "path";
+const WebSocket = require("ws");
+const { exec, execSync } = require("child_process");
+const os = require("os");
+const path = require("path");
 
 const SERVER_URL = "wss://bot-remote-production.up.railway.app";
 
