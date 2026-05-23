@@ -63,35 +63,49 @@ function getMACAddress() {
 let statusAhkSaatIni = false;
 let wsGlobal = null;
 
-// Mengirimkan ketukan tombol virtual (F3/F8) ke Windows - 100% BEBAS ADMINISTRATOR
-function kirimTombolVirtualKeWindows(tombol) {
+// ==========================================================
+// KONTROL BALIK LAYAR: JALANKAN / MATIKAN VIA PROSES KERNEL WINDOWS
+// ==========================================================
+function kendalikanAhkBalikLayar(aksi) {
   return new Promise((resolve) => {
     if (os.platform() !== "win32") return resolve();
-    const cmd = `mshta vbscript:Execute("CreateObject(""Wscript.Shell"").SendKeys(""{${tombol}}""):close")`;
-    exec(cmd, () => resolve());
+
+    let cmd = "";
+    if (aksi === "start") {
+      // Menjalankan langsung script.ahk dari foldernya (Sama seperti double-click / F3)
+      cmd = `start "" "script.ahk"`;
+    } else if (aksi === "stop") {
+      // Membunuh proses AutoHotkey sampai bersih (Sama seperti F8)
+      cmd = `taskkill /f /im AutoHotkey.exe || exit 0`;
+    }
+
+    console.log(`[Executing Kernel Command]: ${cmd}`);
+    exec(cmd, () => {
+      // Beri jeda 1 detik agar Windows memperbarui Task Manager, lalu cek status terbaru
+      setTimeout(() => {
+        periksaStatusAktifWindows();
+        resolve();
+      }, 1000);
+    });
   });
 }
 
-// PEMANTAU OTOMATIS: Mendeteksi apakah ikon AHK ada di Hidden Icon (Tasklist)
-function aktifkanPemantauProsesAhk() {
+// PEMANTAU REAL-TIME: Selalu cek apakah AutoHotkey.exe ada di background
+function periksaStatusAktifWindows() {
   if (os.platform() !== "win32") return;
 
-  setInterval(() => {
-    // Mengecek apakah aplikasi AutoHotkey.exe sedang stand-by aktif di Windows
-    exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, stdout) => {
-      let sedangStandby = false;
-      if (!err && stdout.toLowerCase().includes("autohotkey.exe")) {
-        sedangStandby = true;
-      }
-      
-      // Jika statusnya berubah (misal baru diklik dua kali atau baru diclose manual)
-      if (statusAhkSaatIni !== sedangStandby) {
-        statusAhkSaatIni = sedangStandby;
-        console.log(`[Sync System] AutoHotkey Standby: ${statusAhkSaatIni ? "YA (🟢)" : "TIDAK (🔴)"}`);
-        paksaKirimTelemetri();
-      }
-    });
-  }, 3000); // Cek otomatis setiap 3 detik sekali
+  exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, stdout) => {
+    let sedangJalan = false;
+    if (!err && stdout.toLowerCase().includes("autohotkey.exe")) {
+      sedangJalan = true;
+    }
+    
+    if (statusAhkSaatIni !== sedangJalan) {
+      statusAhkSaatIni = sedangJalan;
+      console.log(`[Sync] Status AHK Berubah -> Menyala/Standby: ${statusAhkSaatIni}`);
+      paksaKirimTelemetri();
+    }
+  });
 }
 
 function paksaKirimTelemetri() {
@@ -101,7 +115,7 @@ function paksaKirimTelemetri() {
 
     const payload = {
       id: cleanId,
-      ahkEnabled: statusAhkSaatIni, // Sinyal stand-by masuk ke sini
+      ahkEnabled: statusAhkSaatIni,
       hostname: info.hostname,
       model: `${info.platform} (${info.arch})`,
       wifi: info.wifi,
@@ -116,22 +130,28 @@ function connectToServer() {
   const ws = new WebSocket(SERVER_URL);
   wsGlobal = ws;
   let intervalPingTelemetri;
+  let intervalCekTasklist;
 
   ws.on("open", () => {
     console.log("✔ Connected to remote server safely");
-    paksaKirimTelemetri();
+    periksaStatusAktifWindows();
+    
+    // Ping telemetri setiap 10 detik
     intervalPingTelemetri = setInterval(paksaKirimTelemetri, 10000); 
+    // Cek kondisi real-time Task Manager setiap 3 detik (Biar responsif saat F8 dipencet manual)
+    intervalCekTasklist = setInterval(periksaStatusAktifWindows, 3000);
   });
 
   ws.on("message", (message) => {
     try {
       const data = JSON.parse(message.toString());
       if (data && data.type === "execute_command" && data.action) {
-        // Menerima perintah klik On/Off dari Web Dashboard Vercel
+        console.log("Menerima instruksi Web:", data.action);
+        
         if (data.action === "start_ahk") {
-          kirimTombolVirtualKeWindows("F3");
+          kendalikanAhkBalikLayar("start");
         } else if (data.action === "stop_ahk") {
-          kirimTombolVirtualKeWindows("F8");
+          kendalikanAhkBalikLayar("stop");
         }
       }
     } catch (err) { console.error(err.message); }
@@ -139,12 +159,12 @@ function connectToServer() {
 
   ws.on("close", () => {
     clearInterval(intervalPingTelemetri);
+    clearInterval(intervalCekTasklist);
     setTimeout(connectToServer, 5000);
   });
 
   ws.on("error", () => {});
 }
 
-console.log("Starting remote client (Standard User Edition)...");
-aktifkanPemantauProsesAhk();
+console.log("Starting remote client (Expert Edition)...");
 connectToServer();
