@@ -16,7 +16,7 @@ import {
   Activity,
   Save,
   Languages,
-  FileCode // Icon tambahan untuk penanda input script
+  FileCode 
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
@@ -24,7 +24,6 @@ const PIN_AKSES = import.meta.env.VITE_PASSWORD || 'Taikbabi182#';
 const URL_HTTP = "https://bot-remote-production.up.railway.app";
 const URL_WS = "wss://bot-remote-production.up.railway.app";
 
-// Kumpulan Bahasa yang Natural dan Tidak Kaku
 const KAMUS_BAHASA = {
   ID: {
     loading: "MEMUAT DASBOR PUSAT...",
@@ -131,7 +130,6 @@ export default function App() {
   const [wsTerhubung, setWsTerhubung] = useState(false);
   const [notifikasi, setNotifikasi] = useState(null);
 
-  // State Baru untuk merekam input nama file script kustom per perangkat
   const [namaScriptInput, setNamaScriptInput] = useState({});
 
   const [dataForm, setDataForm] = useState({
@@ -275,7 +273,6 @@ export default function App() {
     return { total, online, offline, ahkAktif };
   }, [masterDaftarPerangkat]);
 
-  // UPDATE LOGIK: Mengirimkan parameter nama file kustom ke server backend
   const ubahStatusAhk = async (perangkat) => {
     try {
       const aksiPerintah = perangkat.ahkEnabled ? 'stop_ahk' : 'start_ahk';
@@ -287,7 +284,7 @@ export default function App() {
         body: JSON.stringify({ 
           deviceId: perangkat.serial, 
           command: aksiPerintah,
-          scriptName: scriptSpesifik // Dikirimkan agar dieksekusi client.exe secara dinamis
+          scriptName: scriptSpesifik 
         }),
       });
       if (respon.ok) {
@@ -334,20 +331,20 @@ export default function App() {
     }
   };
 
-  // UPDATE LOGIK: Mengirim password PIN_AKSES agar rute DELETE server.js tidak memblokir hapus data
+  // FIXED METHOD: String password di-hardcode ke 'Taikbabi182#' untuk mencegah pemblokiran 403 oleh Railway
   const hapusPerangkatPermanen = async (serialTarget) => {
     if (!window.confirm(teks.confirmDelete)) return;
     try {
       const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, { 
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: PIN_AKSES }) // Menyertakan kata sandi otorisasi cloud
+        body: JSON.stringify({ password: "Taikbabi182#" }) 
       });
       if (hapus.ok) {
         tampilkanNotifikasi(teks.notifDbDeleted);
         muatDataDariDatabase();
       } else {
-        tampilkanNotifikasi('Unauthorized or key mismatched');
+        tampilkanNotifikasi('Unauthorized or key mismatched (403)');
       }
     } catch (g) {
       tampilkanNotifikasi('Purge failure');
@@ -442,7 +439,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
-      {/* HEADER DASBOR */}
       <header className="bg-slate-900/80 border-b border-slate-800/80 sticky top-0 backdrop-blur-md z-40 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-600 rounded-xl text-white shadow-md">
@@ -456,7 +452,6 @@ export default function App() {
           </div>
         </div>
         
-        {/* INTERFACE TOGGLE BAHASA DAN STATUS OPERASI */}
         <div className="flex items-center gap-3 flex-wrap justify-end">
           <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition">
             <Languages className="w-3.5 h-3.5" />
@@ -478,8 +473,6 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        
-        {/* PANEL STATUS METRIK RIIL */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl relative overflow-hidden">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{teks.statDb}</p>
@@ -505,7 +498,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* REGISTRASI FORM PERANGKAT */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
           <h2 className="text-xs font-black uppercase text-slate-300 tracking-widest flex items-center gap-2">
             <Plus className="w-4 h-4 text-indigo-500" /> {idSedangDiedit ? teks.formTitleEdit : teks.formTitleAdd}
@@ -539,7 +531,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* FILTER DAN DATA UTILITY */}
         <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative w-full md:flex-1">
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
@@ -562,7 +553,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* CORE GRID LAYOUT LIST PERANGKAT */}
         <div className="space-y-3">
           {daftarHasilPencarian.length === 0 ? (
             <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl text-center py-12 text-slate-500 text-xs font-mono">
@@ -579,7 +569,6 @@ export default function App() {
                     : 'border-slate-800/80'
                 }`}
               >
-                
                 <div className="flex items-start gap-3">
                   <div className={`p-3 rounded-xl border ${perangkat.isOnline ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-600'}`}>
                     <Laptop className="w-4 h-4" />
@@ -587,7 +576,6 @@ export default function App() {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-bold text-sm text-white tracking-tight">{perangkat.name}</h4>
-                      
                       <span className={`text-[9px] font-black font-mono px-2 py-0.5 rounded-full border tracking-wider ${
                         perangkat.isOnline 
                           ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
@@ -595,7 +583,6 @@ export default function App() {
                       }`}>
                         {perangkat.isOnline ? teks.tagOnline : teks.tagOffline}
                       </span>
-
                       {perangkat.terbacaOtomatisBelumDisimpan && (
                         <span className="bg-cyan-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded font-mono uppercase tracking-wider animate-pulse">
                           {teks.tagUnsaved}
@@ -610,17 +597,13 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Telemetri Info Jaringan */}
                 <div className="grid grid-cols-3 gap-x-6 gap-y-1 text-[11px] font-mono text-slate-400 bg-slate-950 border border-slate-800/60 px-4 py-2.5 rounded-xl w-full lg:w-auto shadow-inner">
                   <div><span className="text-slate-600">IP ROUTE:</span> <span className="text-slate-200 font-bold">{perangkat.ip}</span></div>
                   <div><span className="text-slate-600">MAC ADDR:</span> <span className="text-slate-200">{perangkat.mac}</span></div>
                   <div><span className="text-slate-600">WIFI ID :</span> <span className="text-slate-300 font-sans font-bold">{perangkat.wifi}</span></div>
                 </div>
 
-                {/* Komponen Operasi Aksi */}
                 <div className="flex items-center gap-3 w-full lg:w-auto justify-end border-t border-slate-800/60 pt-3 lg:pt-0 lg:border-t-0">
-                  
-                  {/* INPUT DYNAMIC SCRIPT: Mengisi Nama Script Custom Sebelum Klik Nyala */}
                   {perangkat.isOnline && !perangkat.ahkEnabled && (
                     <div className="relative flex items-center">
                       <FileCode className="w-3.5 h-3.5 text-slate-500 absolute left-2 pointer-events-none" />
@@ -669,14 +652,12 @@ export default function App() {
                     </>
                   )}
                 </div>
-
               </div>
-            ))
+            )
           )}
         </div>
       </main>
 
-      {/* TOAST SYSTEM ACCENT */}
       {notifikasi && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-100 shadow-2xl flex items-center gap-2 font-mono animate-fade-in">
           <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
