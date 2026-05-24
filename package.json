@@ -2,10 +2,9 @@
   "name": "bot-remote-backend",
   "version": "1.0.0",
   "type": "module",
-  "main": "script.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node script.js",
-    "build": "mkdir -p dist && echo '<script>window.location.href=\"/api/devices\"</script>' > dist/index.html"
+    "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
