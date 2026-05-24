@@ -5,9 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "vite",
-    "build": "vite build",
-    "vercel-build": "vite build"
+    "build": "echo 'Bypass Build'",
+    "vercel-build": "echo 'Bypass Build'"
   },
   "dependencies": {
     "cors": "^2.8.5",
