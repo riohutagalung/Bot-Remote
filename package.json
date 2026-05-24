@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "mkdir -p dist && echo '{\"version\": 2, \"rewrites\": [{ \"source\": \"/(.*)\", \"destination\": \"/\" }]}' > vercel.json"
+    "build": "mkdir -p dist && echo '{\"version\": 2, \"routes\": [{ \"src\": \"/(.*)\", \"dest\": \"/\" }]}' > dist/vercel.json && echo 'Bypass' > dist/index.html"
   },
   "dependencies": {
     "cors": "^2.8.5",
