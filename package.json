@@ -4,10 +4,12 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "vite",
+    "build": "vite build",
+    "vercel-build": "vite build"
   },
   "dependencies": {
-    "@vercel/analytics": "^2.0.1",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "ws": "^8.17.1"
