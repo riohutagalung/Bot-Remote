@@ -5,7 +5,7 @@
   "main": "script.js",
   "scripts": {
     "start": "node script.js",
-    "build": "mkdir -p dist && echo 'Done'"
+    "build": "mkdir -p dist && echo '<script>window.location.href=\"/api/devices\"</script>' > dist/index.html"
   },
   "dependencies": {
     "cors": "^2.8.5",
