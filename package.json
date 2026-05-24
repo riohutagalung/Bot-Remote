@@ -4,8 +4,7 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "build": "mkdir dist && echo '<h1>Backend Online</h1>' > dist/index.html"
+    "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
