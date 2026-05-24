@@ -22,34 +22,6 @@ app.options('*', cors()); // Bypass preflight request dari browser
 
 app.use(express.json());
 
-// =================================================================
-// TAMBAHAN BARU: Gembok Basic Auth Pengunci Seluruh Akses Web/API
-// =================================================================
-app.use((req, res, next) => {
-  // Bypass gembok khusus untuk koneksi WebSocket utama agar bot laptop tidak ikut terkunci
-  if (req.headers.upgrade && req.headers.upgrade.toLowerCase() === 'websocket') {
-    return next();
-  }
-
-  const authHeader = req.headers.authorization || '';
-
-  if (!authHeader || !authHeader.startsWith('Basic ')) {
-    res.set('WWW-Authenticate', 'Basic realm="Secure Area"');
-    return res.status(401).send('EH siapa kau!');
-  }
-
-  const auth = authHeader.split(' ')[1];
-  const [user, pwd] = Buffer.from(auth, 'base64').toString().split(':');
-
-  // Username dan password persis sesuai request abang tadi
-  if (user === 'hutagalungrioo' && pwd === 'Taikbabi182#') {
-    return next(); // Password benar, silakan masuk bos!
-  }
-
-  res.set('WWW-Authenticate', 'Basic realm="Secure Area"');
-  return res.status(401).send('Kunci Salah, Cabut kau!');
-});
-
 const PORT = process.env.PORT || 8080;
 const DATA_FILE = path.join(__dirname, "cloud_devices.json");
 
