@@ -2,9 +2,9 @@
   "name": "bot-remote-backend",
   "version": "1.0.0",
   "type": "module",
-  "main": "server.js",
+  "main": "script.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node script.js",
     "build": "mkdir -p dist && echo 'Done'"
   },
   "dependencies": {
