@@ -482,13 +482,13 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute top-4 right-4 z-50">
-          {/* Tombol Bendera Minimalis Sesuai Permintaan */}
-          <button 
-            onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
-            className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition"
-          >
-            {bahasa === 'ID' ? '🇺🇸 ENG' : '🇮🇩 ID'}
-          </button>
+          {/* Tombol Bendera Minimalis di Halaman Login */}
+<button 
+  onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
+  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition shadow-md"
+>
+  {bahasa === 'ID' ? 'ID 🇮🇩' : 'ENG 🇺🇸'}
+</button>
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_60%)]" />
         <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
@@ -534,13 +534,13 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          {/* Tombol Bendera Minimalis */}
-          <button 
-            onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
-            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition"
-          >
-            {bahasa === 'ID' ? '🇺🇸 ENG' : '🇮🇩 ID'}
-          </button>
+          {/* Tombol Bendera Minimalis di Header Dashboard */}
+<button 
+  onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
+  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
+>
+  {bahasa === 'ID' ? 'ID 🇮🇩' : 'ENG 🇺🇸'}
+</button>
           
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold font-mono border ${wsTerhubung ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'}`}>
             <Radio className={`w-3.5 h-3.5 ${wsTerhubung ? 'animate-pulse' : ''}`} />
