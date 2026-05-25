@@ -140,7 +140,6 @@ export default function App() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    // Membaca token dari localStorage / sessionStorage secara konsisten
     const tokenOtorisasi = localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY);
     if (tokenOtorisasi) setSudahLogin(true);
     setCekSesiSelesai(true);
@@ -670,7 +669,7 @@ export default function App() {
                   </button>
                 </div>
               </div>
-            )
+            ))
           )}
         </div>
       </main>
