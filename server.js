@@ -9,9 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 
-// =================================================================
-// PERBAIKAN DI SINI: Mengizinkan PUT & OPTIONS agar Vercel tidak diblokir
-// =================================================================
+// Mengizinkan PUT & OPTIONS agar Vercel tidak diblokir
 app.use(cors({ 
   origin: '*', 
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -50,9 +48,7 @@ let deviceConnections = new Map(); // Menyimpan koneksi live WS saja
 
 app.get("/", (_, res) => res.send("WebSocket Cloud Backend Online"));
 
-// =================================================================
 // ENDPOINT BARU: Validasi password aman di dalam server (Anti-Inspect)
-// =================================================================
 app.post("/api/login", (req, res) => {
   const { password } = req.body || {};
   const rootPassword = process.env.DASHBOARD_PASSWORD || "Taikbabi182#";
@@ -78,18 +74,10 @@ app.get("/api/devices", (req, res) => {
 });
 
 // ====================================================================================
-// 2. API UNTUK MENGHAPUS LAPTOP DENGAN VERIFIKASI HEADER TOKEN (AMAN 100%)
-// PERBAIKAN: Menambahkan fallback check jika parameter yang dikirim berupa serial/id string
+// 2. API UNTUK MENGHAPUS LAPTOP - SEKARANG POLOS TANPA STRIP VERIFIKASI HEADER TOKEN
 // ====================================================================================
 app.delete("/api/devices/:id", (req, res) => {
   const { id } = req.params;
-  
-  // Ambil token dari header Authorization untuk memverifikasi hak akses hapus
-  const authHeader = req.headers['authorization'];
-  if (authHeader !== `Bearer ${SECURE_TOKEN}`) {
-    return res.status(403).json({ error: "Sandi salah atau Kedaluwarsa! Anda tidak berhak menghapus perangkat ini (403)." });
-  }
-
   const cleanId = id.toString().trim().toLowerCase();
   
   // Cari target penghapusan baik berdasarkan Key ID utama ataupun property Serial di dalamnya

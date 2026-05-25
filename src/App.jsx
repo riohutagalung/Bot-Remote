@@ -7,16 +7,16 @@ import {
   Search, 
   Laptop, 
   Plus,
-  LogOut,
   Sliders,
   ShieldCheck,
   Radio,
   CheckCircle,
   XCircle,
   Activity,
-  Save,
   Languages,
-  FileCode 
+  MoreVertical,
+  Save,
+  Edit2
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
@@ -26,7 +26,7 @@ const URL_WS = "wss://bot-remote-production.up.railway.app";
 const KAMUS_BAHASA = {
   ID: {
     loading: "MEMUAT DASBOR PUSAT...",
-    authTitle: "RH Kontrol Pusat",
+    authTitle: "RH Remote Dashboard",
     authSub: "Masukkan kunci akses untuk masuk",
     authPlace: "Kata Sandi",
     authBtn: "Masuk Dashboard",
@@ -59,19 +59,25 @@ const KAMUS_BAHASA = {
     btnControlOn: "AHK: NYALA 🟢",
     btnControlOff: "AHK: MATI 🔴",
     btnControlOffline: "OFFLINE 📡",
-    btnEdit: "Ubah",
+    btnEdit: "Ubah Data",
     notifWs: "Sistem telemetri aktif",
     notifAhkSend: "Sinyal kontrol dikirim ke",
     notifDbSaved: "Data terkunci ke server backend",
     notifDbDeleted: "Data dihapus dari database",
     notifExport: "Database berhasil diekspor",
     notifImport: "Impor massal sukses",
-    confirmDelete: "Hapus permanen laptop ini dari database pusat?",
-    alertSerial: "Serial Number wajib diisi!"
+    alertSerial: "Serial Number wajib diisi!",
+    btnMoreAction: "Aksi Perangkat",
+    modalConfirmTitle: "Konfirmasi Tindakan",
+    modalDangerTitle: "⚠️ TINDAKAN BERBAHAYA",
+    modalCancel: "Batal",
+    modalContinue: "Lanjutkan",
+    confirmDelete1: "Hapus permanen laptop ini dari database pusat?",
+    confirmDelete2: "APAKAH KAU BETUL-BETUL YAKIN? Tindakan ini akan menghapus data secara permanen dari cloud backend!"
   },
   EN: {
     loading: "BOOTING MASTER SYSTEM...",
-    authTitle: "RH Terminal Node",
+    authTitle: "RH Remote Dashboard",
     authSub: "Enter validation key to gain access",
     authPlace: "Access Token Password",
     authBtn: "Access Dashboard",
@@ -104,20 +110,27 @@ const KAMUS_BAHASA = {
     btnControlOn: "AHK: RUNNING 🟢",
     btnControlOff: "AHK: INACTIVE 🔴",
     btnControlOffline: "OFFLINE 📡",
-    btnEdit: "Edit",
+    btnEdit: "Edit Baseline",
     notifWs: "Telemetry pipeline linked",
     notifAhkSend: "Control signal dispatched to",
     notifDbSaved: "Schema locked into cluster cloud",
     notifDbDeleted: "Record purged from database memory",
     notifExport: "Cluster data schema exported",
     notifImport: "Bulk system integration successful",
-    confirmDelete: "Permanently clear this hardware entry from remote master?",
-    alertSerial: "Hardware Serial Identifier is required!"
+    alertSerial: "Hardware Serial Identifier is required!",
+    btnMoreAction: "Node Actions",
+    modalConfirmTitle: "Action Confirmation",
+    modalDangerTitle: "⚠️ CRITICAL DESTRUCTION WORKFLOW",
+    modalCancel: "Cancel",
+    modalContinue: "Proceed",
+    confirmDelete1: "Permanently clear this hardware entry from remote master cloud?",
+    confirmDelete2: "ARE YOU ABSOLUTELY SURE? This action purges structural records irreversibly from cloud database!"
   }
 };
 
 export default function App() {
-  const [bahasa, setBahasa] = useState('ID');
+  // Mengunci default bahasa ke English (EN) sesuai request abang
+  const [bahasa, setBahasa] = useState('EN');
   const teks = KAMUS_BAHASA[bahasa];
 
   const [sudahLogin, setSudahLogin] = useState(false);
@@ -132,6 +145,16 @@ export default function App() {
   const [notifikasi, setNotifikasi] = useState(null);
 
   const [namaScriptInput, setNamaScriptInput] = useState({});
+  const [activeDropdown, setActiveDropdown] = useState(null);
+
+  // State untuk kontrol Custom Modal Bertema khusus (Pengganti window.confirm / alert)
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    isDanger: false,
+    onConfirm: null
+  });
 
   const [dataForm, setDataForm] = useState({
     name: '', serial: '', model: '', wifi: '', ip: '', mac: ''
@@ -143,6 +166,13 @@ export default function App() {
     const tokenOtorisasi = localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY);
     if (tokenOtorisasi) setSudahLogin(true);
     setCekSesiSelesai(true);
+  }, []);
+
+  // Menutup dropdown menu jika klik di luar area komponen
+  useEffect(() => {
+    const closeAllDropdowns = () => setActiveDropdown(null);
+    window.addEventListener('click', closeAllDropdowns);
+    return () => window.removeEventListener('click', closeAllDropdowns);
   }, []);
 
   const muatDataDariDatabase = async () => {
@@ -209,6 +239,20 @@ export default function App() {
   const tampilkanNotifikasi = (pesan) => {
     setNotifikasi(pesan);
     setTimeout(() => setNotifikasi(null), 3000);
+  };
+
+  // Helper Custom Pop-up Modal Bertema Pengganti window.confirm bawaan browser
+  const triggerCustomConfirm = (title, message, isDanger, onConfirmBlock) => {
+    setModalConfig({
+      isOpen: true,
+      title,
+      message,
+      isDanger,
+      onConfirm: () => {
+        onConfirmBlock();
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   };
 
   const masterDaftarPerangkat = useMemo(() => {
@@ -305,13 +349,14 @@ export default function App() {
       return;
     }
     try {
-      const jalurUrl = idSedangDiedit ? `${URL_HTTP}/api/devices/${idSedangDiedit}` : `${URL_HTTP}/api/devices`;
-      const opsiMetode = idSedangDiedit ? 'PUT' : 'POST';
+      const targetIdRoute = idSedangDiedit ? idSedangDiedit : payload.serial.toString().trim();
+      const jalurUrl = `${URL_HTTP}/api/devices/${targetIdRoute}`;
       
       const hasilKirim = await fetch(jalurUrl, {
-        method: opsiMetode,
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: targetIdRoute,
           serial: payload.serial,
           name: payload.name || 'Laptop Stored',
           model: payload.model || '-',
@@ -326,33 +371,38 @@ export default function App() {
         setDataForm({ name: '', serial: '', model: '', wifi: '', ip: '', mac: '' });
         setIdSedangDiedit(null);
         muatDataDariDatabase();
+      } else {
+        tampilkanNotifikasi('Gagal mengamankan entri data ke cloud server.');
       }
     } catch (e) {
       tampilkanNotifikasi('Database transaction failure');
     }
   };
 
-  const hapusPerangkatPermanen = async (serialTarget) => {
-    if (!window.confirm(teks.confirmDelete)) return;
-    try {
-      const tokenSesi = localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY) || "rh-secure-token-session-key-2026";
-
-      const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, { 
-        method: 'DELETE',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokenSesi}`
-        }
-      });
-      if (hapus.ok) {
-        tampilkanNotifikasi(teks.notifDbDeleted);
-        muatDataDariDatabase();
-      } else {
-        tampilkanNotifikasi('Sesi habis atau kunci tidak valid (403)');
-      }
-    } catch (g) {
-      tampilkanNotifikasi('Purge failure');
-    }
+  // Mekanisme Double Confirmation Menggunakan Custom Theme Pop-up Modal 
+  const hapusPerangkatPermanen = (serialTarget) => {
+    // Konfirmasi Tingkat Pertama (Custom Modal UI)
+    triggerCustomConfirm(teks.modalConfirmTitle, teks.confirmDelete1, false, () => {
+      // Konfirmasi Tingkat Kedua (Custom Modal UI - Alur Bahaya / Danger Workflows)
+      setTimeout(() => {
+        triggerCustomConfirm(teks.modalDangerTitle, teks.confirmDelete2, true, async () => {
+          try {
+            const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, { 
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            if (hapus.ok) {
+              tampilkanNotifikasi(teks.notifDbDeleted);
+              muatDataDariDatabase();
+            } else {
+              tampilkanNotifikasi('Gagal membersihkan data baseline dari server.');
+            }
+          } catch (g) {
+            tampilkanNotifikasi('Purge failure');
+          }
+        });
+      }, 400); 
+    });
   };
 
   const eksekusiLoginAPI = async () => {
@@ -397,16 +447,18 @@ export default function App() {
         const dataUrai = JSON.parse(peristiwa.target.result);
         if (!Array.isArray(dataUrai)) return;
         
-        const responKirim = await fetch(`${URL_HTTP}/api/devices/import`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ devices: dataUrai })
-        });
-        
-        if (responKirim.ok) {
-          tampilkanNotifikasi(teks.notifImport);
-          muatDataDariDatabase();
+        for (const item of dataUrai) {
+          if (item.serial || item.id) {
+            const targetKey = item.serial || item.id;
+            await fetch(`${URL_HTTP}/api/devices/${targetKey}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(item)
+            });
+          }
         }
+        tampilkanNotifikasi(teks.notifImport);
+        muatDataDariDatabase();
       } catch (er) {
         console.error(er);
       }
@@ -430,8 +482,12 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute top-4 right-4 z-50">
-          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition">
-            <Languages className="w-3.5 h-3.5" /> {bahasa === 'ID' ? 'English' : 'Indonesia'}
+          {/* Tombol Bendera Minimalis Sesuai Permintaan */}
+          <button 
+            onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition"
+          >
+            {bahasa === 'ID' ? '🇺🇸 ENG' : '🇮🇩 ID'}
           </button>
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_60%)]" />
@@ -471,16 +527,19 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
-              RH Control Panel <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono px-1.5 py-0.5 rounded">v4.2</span>
+              RH Control Panel <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono px-1.5 py-0.5 rounded">v5.0</span>
             </h1>
             <p className="text-xs text-slate-400 font-medium">{teks.subTitle}</p>
           </div>
         </div>
         
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition">
-            <Languages className="w-3.5 h-3.5" />
-            {bahasa === 'ID' ? 'English' : 'Indonesia'}
+          {/* Tombol Bendera Minimalis */}
+          <button 
+            onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition"
+          >
+            {bahasa === 'ID' ? '🇺🇸 ENG' : '🇮🇩 ID'}
           </button>
           
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold font-mono border ${wsTerhubung ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'}`}>
@@ -498,6 +557,7 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        {/* Statistik Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl relative overflow-hidden">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{teks.statDb}</p>
@@ -523,6 +583,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* Input Form Box */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
           <h2 className="text-xs font-black uppercase text-slate-300 tracking-widest flex items-center gap-2">
             <Plus className="w-4 h-4 text-indigo-500" /> {idSedangDiedit ? teks.formTitleEdit : teks.formTitleAdd}
@@ -540,9 +601,10 @@ export default function App() {
                 key={kolom.key}
                 type="text" 
                 value={dataForm[kolom.key]} 
+                disabled={idSedangDiedit && kolom.key === 'serial'}
                 onChange={(e) => setDataForm({...dataForm, [kolom.key]: e.target.value})} 
                 placeholder={kolom.label} 
-                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition" 
+                className={`bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition ${idSedangDiedit && kolom.key === 'serial' ? 'opacity-50 cursor-not-allowed' : ''}`} 
               />
             ))}
           </div>
@@ -556,6 +618,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* Search and Action Schema Tools */}
         <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative w-full md:flex-1">
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
@@ -578,6 +641,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* Node Grid Layout */}
         <div className="space-y-3">
           {daftarHasilPencarian.length === 0 ? (
             <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl text-center py-12 text-slate-500 text-xs font-mono">
@@ -629,7 +693,8 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
+                <div className="flex items-center gap-2 w-full lg:w-auto justify-end relative">
+                  {/* Tombol Utama Kontrol AHK Engine */}
                   <button 
                     onClick={() => ubahStatusAhk(perangkat)}
                     disabled={!perangkat.isOnline}
@@ -644,29 +709,69 @@ export default function App() {
                     {!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}
                   </button>
 
-                  <button 
-                    onClick={() => {
-                      setIdSedangDiedit(perangkat.serial);
-                      setDataForm({
-                        name: perangkat.name,
-                        serial: perangkat.serial,
-                        model: perangkat.model,
-                        wifi: perangkat.wifi,
-                        ip: perangkat.ip,
-                        mac: perangkat.mac
-                      });
-                    }}
-                    className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-700 transition"
-                  >
-                    {teks.btnEdit}
-                  </button>
+                  {/* IMPLEMENTASI BUTTON TITIK TIGA YANG ELEGAN & RAPI */}
+                  <div className="relative">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveDropdown(activeDropdown === perangkat.serial ? null : perangkat.serial);
+                      }}
+                      className="p-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 rounded-xl transition"
+                      title={teks.btnMoreAction}
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
 
-                  <button 
-                    onClick={() => hapusPerangkatPermanen(perangkat.serial)}
-                    className="p-2 bg-slate-800 border border-slate-700 rounded-xl text-rose-400 hover:bg-rose-950 hover:border-rose-900 transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    {/* Dropdown Menu Box */}
+                    {activeDropdown === perangkat.serial && (
+                      <div className="absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100">
+                        {/* Opsi 1: Simpan atau Override Baseline */}
+                        <button 
+                          onClick={() => {
+                            simpanKeDatabasePusat(perangkat);
+                            setActiveDropdown(null);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition text-left"
+                        >
+                          <Save className="w-3.5 h-3.5 text-indigo-400" />
+                          {teks.formBtnSave}
+                        </button>
+
+                        {/* Opsi 2: Ubah Data Manual */}
+                        <button 
+                          onClick={() => {
+                            setIdSedangDiedit(perangkat.serial);
+                            setDataForm({
+                              name: perangkat.name,
+                              serial: perangkat.serial,
+                              model: perangkat.model,
+                              wifi: perangkat.wifi,
+                              ip: perangkat.ip,
+                              mac: perangkat.mac
+                            });
+                            setActiveDropdown(null);
+                            window.scrollTo({ top: 120, behavior: 'smooth' });
+                          }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition text-left border-t border-slate-800/60"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-cyan-400" />
+                          {teks.btnEdit}
+                        </button>
+
+                        {/* Opsi 3: Hapus Data Permanen */}
+                        <button 
+                          onClick={() => {
+                            hapusPerangkatPermanen(perangkat.serial);
+                            setActiveDropdown(null);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-rose-400 hover:bg-rose-950/40 transition text-left border-t border-slate-800/60"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          {teks.logout === "Keluar" ? "Hapus Permanen" : "Purge Database"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
@@ -674,6 +779,42 @@ export default function App() {
         </div>
       </main>
 
+      {/* ==================================================================== */}
+      {/* CUSTOM POP-UP CONFIRMATION MODAL (TEMA DASHBOARD CYBERPUNK SLATE)   */}
+      {/* ==================================================================== */}
+      {modalConfig.isOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-xl ${modalConfig.isDanger ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}`}>
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <h3 className={`text-sm font-black tracking-tight uppercase ${modalConfig.isDanger ? 'text-rose-400' : 'text-white'}`}>
+                {modalConfig.title}
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed font-medium">
+              {modalConfig.message}
+            </p>
+            <div className="flex gap-2 pt-2">
+              <button 
+                onClick={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-xl text-xs transition"
+              >
+                {teks.modalCancel}
+              </button>
+              <button 
+                onClick={modalConfig.onConfirm}
+                className={`flex-1 font-bold py-2 rounded-xl text-xs text-white transition ${modalConfig.isDanger ? 'bg-rose-600 hover:bg-rose-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}
+              >
+                {teks.modalContinue}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notifikasi Toast */}
       {notifikasi && (
         <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500 animate-bounce">
           {notifikasi}
