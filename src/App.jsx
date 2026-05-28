@@ -14,9 +14,7 @@ import {
   CheckCircle,
   XCircle,
   Activity,
-  Save,
   Languages,
-  FileCode,
   MoreVertical,
   Edit2
 } from 'lucide-react';
@@ -57,12 +55,11 @@ const KAMUS_BAHASA = {
     emptyData: "BELUM ADA DATA DI DATABASE. HIDUPKAN CLIENT.EXE ATAU INPUT MANUAL.",
     tagOnline: "ONLINE",
     tagOffline: "STANDBY",
-    tagUnsaved: "Belum Disimpan",
     btnControlOn: "AHK: NYALA 🟢",
     btnControlOff: "AHK: MATI 🔴",
     btnControlOffline: "OFFLINE 📡",
-    btnEdit: "Ubah",
-    btnDelete: "Hapus",
+    btnEdit: "Ubah Perangkat",
+    btnDelete: "Hapus Permanen",
     notifWs: "Sistem telemetri aktif",
     notifAhkSend: "Sinyal kontrol dikirim ke",
     notifDbSaved: "Data terkunci ke server backend",
@@ -103,12 +100,11 @@ const KAMUS_BAHASA = {
     emptyData: "NO TRACKED HARDWARE FOUND. RUN CLIENT.EXE OR TRANSACT MANUALLY.",
     tagOnline: "ACTIVE",
     tagOffline: "STANDBY",
-    tagUnsaved: "Not Saved Yet",
     btnControlOn: "AHK: RUNNING 🟢",
     btnControlOff: "AHK: INACTIVE 🔴",
     btnControlOffline: "OFFLINE 📡",
-    btnEdit: "Edit",
-    btnDelete: "Delete",
+    btnEdit: "Edit Baseline",
+    btnDelete: "Purge Node",
     notifWs: "Telemetry pipeline linked",
     notifAhkSend: "Control signal dispatched to",
     notifDbSaved: "Schema locked into cluster cloud",
@@ -136,7 +132,7 @@ export default function App() {
   const [notifikasi, setNotifikasi] = useState(null);
 
   const [namaScriptInput, setNamaScriptInput] = useState({});
-  const [menuTerbuka, setMenuTerbuka] = useState(null); // State kontrol dropdown menu titik 3
+  const [menuTerbuka, setMenuTerbuka] = useState(null);
 
   const [dataForm, setDataForm] = useState({
     name: '', serial: '', model: '', wifi: '', ip: '', mac: ''
@@ -181,6 +177,7 @@ export default function App() {
       socket.onopen = () => {
         setWsTerhubung(true);
         tampilkanNotifikasi(teks.notifWs);
+        socket.send(JSON.stringify({ type: 'dashboard_init' }));
       };
 
       socket.onmessage = (acara) => {
@@ -216,7 +213,6 @@ export default function App() {
     setTimeout(() => setNotifikasi(null), 3000);
   };
 
-  // Tutup menu dropdown otomatis saat klik di luar area komponen list
   useEffect(() => {
     const klikLuarMenu = () => setMenuTerbuka(null);
     window.addEventListener('click', klikLuarMenu);
@@ -242,9 +238,8 @@ export default function App() {
       const dataSinyalLive = petaOnline.get(kunciSerial);
       const statusAktif = petaOnline.has(kunciSerial);
 
-      // Logika Fleksibel: Deteksi status AHK dari client.exe baik root property maupun dari child object `.info`
       const isAhkRunning = dataSinyalLive 
-        ? (dataSinyalLive.ahkEnabled === true || dataSinyalLive.isAhkRunning === true || dataSinyalLive.info?.ahkEnabled === true)
+        ? (dataSinyalLive.ahkEnabled === true || dataSinyalLive.info?.ahkEnabled === true)
         : (perangkat.ahkEnabled === true);
 
       daftarHasilGabung.push({
@@ -255,7 +250,7 @@ export default function App() {
         mac: dataSinyalLive?.info?.mac || dataSinyalLive?.mac || perangkat.mac || '-',
         wifi: dataSinyalLive?.info?.wifi || dataSinyalLive?.wifi || perangkat.wifi || '-',
         model: dataSinyalLive?.info?.model || dataSinyalLive?.model || perangkat.model || '-',
-        name: perangkat.name || dataSinyalLive?.info?.hostname || dataSinyalLive?.hostname || 'Laptop Target',
+        name: perangkat.name || dataSinyalLive?.info?.hostname || 'Laptop Target',
         terbacaOtomatisBelumDisimpan: false
       });
     });
@@ -265,16 +260,16 @@ export default function App() {
       const kunciLiveSerial = live.id.trim().toLowerCase();
 
       if (!serialTerprosesDariDb.has(kunciLiveSerial)) {
-        const isAhkLiveOnlyRunning = live.ahkEnabled === true || live.isAhkRunning === true || live.info?.ahkEnabled === true;
+        const isAhkLiveOnlyRunning = live.ahkEnabled === true || live.info?.ahkEnabled === true;
         
         daftarHasilGabung.push({
           id: `auto-${live.id}`,
-          name: live.info?.hostname || live.hostname || 'New Client Node',
+          name: live.info?.hostname || 'New Client Node',
           serial: live.id.trim(),
-          model: live.info?.model || live.model || 'Windows Client',
-          wifi: live.info?.wifi || live.wifi || '-',
-          ip: live.info?.ip || live.ip || '-',
-          mac: live.info?.mac || live.mac || '-',
+          model: live.info?.model || 'Windows Client',
+          wifi: live.info?.wifi || '-',
+          ip: live.info?.ip || '-',
+          mac: live.info?.mac || '-',
           isOnline: true,
           ahkEnabled: isAhkLiveOnlyRunning,
           terbacaOtomatisBelumDisimpan: true
@@ -316,8 +311,9 @@ export default function App() {
     }
   };
 
-  const simpanKeDatabasePusat = async (dataTarget) => {
-    const payload = dataTarget?.serial ? dataTarget : dataForm;
+  const simpanKeDatabasePusat = async (e) => {
+    if (e) e.preventDefault();
+    const payload = dataForm;
     
     if (!payload.serial) {
       tampilkanNotifikasi(teks.alertSerial);
@@ -330,14 +326,7 @@ export default function App() {
       const hasilKirim = await fetch(jalurUrl, {
         method: opsiMetode,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serial: payload.serial,
-          name: payload.name || 'Laptop Stored',
-          model: payload.model || '-',
-          wifi: payload.wifi || '-',
-          ip: payload.ip || '-',
-          mac: payload.mac || '-'
-        })
+        body: JSON.stringify(payload)
       });
 
       if (hasilKirim.ok) {
@@ -354,14 +343,12 @@ export default function App() {
   const hapusPerangkatPermanen = async (serialTarget) => {
     if (!window.confirm(teks.confirmDelete)) return;
     try {
-      const tokenSesi = localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY) || "rh-secure-token-session-key-2026";
-
-      const sampleAuthHeader = `Bearer ${tokenSesi}`;
+      const tokenSesi = localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY);
       const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, { 
         method: 'DELETE',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': sampleAuthHeader
+          'Authorization': `Bearer ${tokenSesi}`
         }
       });
       if (hapus.ok) {
@@ -375,7 +362,8 @@ export default function App() {
     }
   };
 
-  const eksekusiLoginAPI = async () => {
+  const eksekusiLoginAPI = async (e) => {
+    if (e) e.preventDefault();
     try {
       const kirim = await fetch(`${URL_HTTP}/api/login`, {
         method: 'POST',
@@ -455,7 +443,7 @@ export default function App() {
           </button>
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_60%)]" />
-        <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
+        <form onSubmit={eksekusiLoginAPI} className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
           <div className="text-center space-y-2">
             <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner">
               <ShieldCheck className="w-6 h-6" />
@@ -467,17 +455,13 @@ export default function App() {
             type="password"
             value={inputPassword}
             onChange={(e) => setInputPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && eksekusiLoginAPI()}
             placeholder={teks.authPlace}
             className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-center text-sm focus:outline-none focus:border-indigo-500 font-mono transition"
           />
-          <button 
-            onClick={eksekusiLoginAPI} 
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-xs tracking-wider uppercase transition-all"
-          >
+          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-xs tracking-wider uppercase transition-all">
             {teks.authBtn}
           </button>
-        </div>
+        </form>
       </div>
     );
   }
@@ -499,21 +483,12 @@ export default function App() {
         
         <div className="flex items-center gap-3 flex-wrap justify-end">
           <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition">
-            <Languages className="w-3.5 h-3.5" />
-            {bahasa === 'ID' ? 'English' : 'Indonesia'}
+            <Languages className="w-3.5 h-3.5" /> {bahasa === 'ID' ? 'English' : 'Indonesia'}
           </button>
-          
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold font-mono border ${wsTerhubung ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'}`}>
-            <Radio className={`w-3.5 h-3.5 ${wsTerhubung ? 'animate-pulse' : ''}`} />
-            {wsTerhubung ? teks.statusWsActive : teks.statusWsClose}
+            <Radio className={`w-3.5 h-3.5 ${wsTerhubung ? 'animate-pulse' : ''}`} /> {wsTerhubung ? teks.statusWsActive : teks.statusWsClose}
           </div>
-          
-          <button 
-            onClick={() => { localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY); setSudahLogin(false); }} 
-            className="px-3 py-1.5 bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-400 border border-slate-700 hover:border-rose-900 rounded-xl text-xs font-bold transition"
-          >
-            {teks.logout}
-          </button>
+          <button onClick={() => { localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY); setSudahLogin(false); }} className="px-3 py-1.5 bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-400 border border-slate-700 hover:border-rose-900 rounded-xl text-xs font-bold transition">{teks.logout}</button>
         </div>
       </header>
 
@@ -525,9 +500,7 @@ export default function App() {
             <div className="absolute right-3 bottom-3 text-slate-800 font-black text-4xl select-none pointer-events-none">DB</div>
           </div>
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl relative overflow-hidden">
-            <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> {teks.statOnline}
-            </p>
+            <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> {teks.statOnline}</p>
             <p className="text-3xl font-black text-white mt-2 font-mono">{panelStatistik.online}</p>
             <div className="absolute right-3 bottom-3 text-emerald-500/5"><CheckCircle className="w-12 h-12" /></div>
           </div>
@@ -543,10 +516,8 @@ export default function App() {
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
-          <h2 className="text-xs font-black uppercase text-slate-300 tracking-widest flex items-center gap-2">
-            <Plus className="w-4 h-4 text-indigo-500" /> {idSedangDiedit ? teks.formTitleEdit : teks.formTitleAdd}
-          </h2>
+        <form onSubmit={simpanKeDatabasePusat} className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
+          <h2 className="text-xs font-black uppercase text-slate-300 tracking-widest flex items-center gap-2"><Plus className="w-4 h-4 text-indigo-500" /> {idSedangDiedit ? teks.formTitleEdit : teks.formTitleAdd}</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
               { label: teks.formPlaceName, key: 'name' },
@@ -560,37 +531,28 @@ export default function App() {
                 key={kolom.key}
                 type="text" 
                 value={dataForm[kolom.key]} 
+                disabled={idSedangDiedit && kolom.key === 'serial'}
                 onChange={(e) => setDataForm({...dataForm, [kolom.key]: e.target.value})} 
                 placeholder={kolom.label} 
-                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition" 
+                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition disabled:opacity-50" 
               />
             ))}
           </div>
           <div className="flex gap-2">
-            <button onClick={() => simpanKeDatabasePusat(null)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all">
-              {teks.formBtnSave}
-            </button>
+            <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all">{teks.formBtnSave}</button>
             {idSedangDiedit && (
-              <button onClick={() => { setIdSedangDiedit(null); setDataForm({ name: '', serial: '', model: '', wifi: '', ip: '', mac: '' }); }} className="px-4 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">{teks.formBtnCancel}</button>
+              <button type="button" onClick={() => { setIdSedangDiedit(null); setDataForm({ name: '', serial: '', model: '', wifi: '', ip: '', mac: '' }); }} className="px-4 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">{teks.formBtnCancel}</button>
             )}
           </div>
-        </div>
+        </form>
 
         <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative w-full md:flex-1">
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
-            <input 
-              type="text" 
-              placeholder={teks.searchPlace} 
-              value={kataKunciCari}
-              onChange={(e) => setKataKunciCari(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-2xl text-xs text-white focus:outline-none font-medium"
-            />
+            <input type="text" placeholder={teks.searchPlace} value={kataKunciCari} onChange={(e) => setKataKunciCari(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-2xl text-xs text-white focus:outline-none font-medium" />
           </div>
           <div className="flex gap-2 w-full md:w-auto justify-end">
-            <button onClick={lakukanEksporData} className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-800 transition">
-              <Download className="w-3.5 h-3.5 text-indigo-400" /> {teks.btnExport}
-            </button>
+            <button onClick={lakukanEksporData} className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-800 transition"><Download className="w-3.5 h-3.5 text-indigo-400" /> {teks.btnExport}</button>
             <label className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-800 transition cursor-pointer">
               <Upload className="w-3.5 h-3.5 text-emerald-400" /> {teks.btnImport}
               <input type="file" accept=".json" ref={fileInputRef} onChange={lakukanImporData} className="hidden" />
@@ -600,115 +562,36 @@ export default function App() {
 
         <div className="space-y-3">
           {daftarHasilPencarian.length === 0 ? (
-            <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl text-center py-12 text-slate-500 text-xs font-mono">
-              <AlertCircle className="w-6 h-6 mx-auto mb-2 text-slate-700" />
-              {teks.emptyData}
-            </div>
+            <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl text-center py-12 text-slate-500 text-xs font-mono"><AlertCircle className="w-6 h-6 mx-auto mb-2 text-slate-700" />{teks.emptyData}</div>
           ) : (
             daftarHasilPencarian.map((perangkat) => (
-              <div 
-                key={perangkat.serial} 
-                className={`bg-slate-900 border rounded-2xl p-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 transition-all relative ${
-                  perangkat.terbacaOtomatisBelumDisimpan 
-                    ? 'border-cyan-500 bg-gradient-to-r from-cyan-950/20 to-transparent' 
-                    : 'border-slate-800/80'
-                }`}
-              >
+              <div key={perangkat.serial} className={`bg-slate-900 border rounded-2xl p-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 transition-all ${perangkat.terbacaOtomatisBelumDisimpan ? 'border-cyan-500 bg-gradient-to-r from-cyan-950/20 to-transparent' : 'border-slate-800/80'}`}>
                 <div className="flex items-start gap-3 flex-1 w-full">
-                  <div className={`p-3 rounded-xl border ${perangkat.isOnline ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-600'}`}>
-                    <Laptop className="w-4 h-4" />
-                  </div>
+                  <div className={`p-3 rounded-xl border ${perangkat.isOnline ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-600'}`}><Laptop className="w-4 h-4" /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-bold text-sm text-white tracking-tight">{perangkat.name}</h4>
-                      <span className={`text-[9px] font-black font-mono px-2 py-0.5 rounded-full border tracking-wider ${
-                        perangkat.isOnline 
-                          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
-                          : 'bg-slate-950 border-slate-800 text-slate-500'
-                      }`}>
-                        {perangkat.isOnline ? teks.tagOnline : teks.tagOffline}
-                      </span>
+                      <span className={`text-[9px] font-black font-mono px-2 py-0.5 rounded-full border tracking-wider ${perangkat.isOnline ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>{perangkat.isOnline ? teks.tagOnline : teks.tagOffline}</span>
                     </div>
                     <p className="text-xs text-slate-400 font-mono mt-1">Serial: {perangkat.serial}</p>
                     <p className="text-xs text-slate-500 mt-0.5">WiFi: {perangkat.wifi} | IP: {perangkat.ip}</p>
-                    
                     {perangkat.isOnline && (
                       <div className="mt-2 max-w-xs">
-                        <input
-                          type="text"
-                          placeholder={teks.formPlaceScript}
-                          value={namaScriptInput[perangkat.serial] || ""}
-                          onChange={(e) => setNamaScriptInput({
-                            ...namaScriptInput,
-                            [perangkat.serial]: e.target.value
-                          })}
-                          className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-white focus:outline-none focus:border-indigo-500 font-mono transition"
-                        />
+                        <input type="text" placeholder={teks.formPlaceScript} value={namaScriptInput[perangkat.serial] || ""} onChange={(e) => setNamaScriptInput({...namaScriptInput, [perangkat.serial]: e.target.value})} className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-white focus:outline-none focus:border-indigo-500 font-mono transition" />
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Kontrol Utama AHK & Menu Dropdown Titik 3 */}
                 <div className="flex items-center gap-3 w-full lg:w-auto justify-end relative">
-                  <button 
-                    onClick={() => ubahStatusAhk(perangkat)}
-                    disabled={!perangkat.isOnline}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                      !perangkat.isOnline 
-                        ? 'bg-slate-950 border border-slate-800 text-slate-600 cursor-not-allowed' 
-                        : perangkat.ahkEnabled 
-                          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
-                          : 'bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
-                    }`}
-                  >
-                    {!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}
-                  </button>
-
-                  {/* Tombol Pembuka Dropdown Titik 3 */}
+                  <button disabled={!perangkat.isOnline} onClick={() => ubahStatusAhk(perangkat)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${!perangkat.isOnline ? 'bg-slate-950 border border-slate-800 text-slate-600 cursor-not-allowed' : perangkat.ahkEnabled ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' : 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'}`}>{!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}</button>
+                  
                   <div className="relative">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation(); // Stop bubble agar event window.onclick tidak langsung memicu penutupan
-                        setMenuTerbuka(menuTerbuka === perangkat.serial ? null : perangkat.serial);
-                      }}
-                      className="p-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-
-                    {/* Tampilan Dropdown: Menyembunyikan Fitur Ubah & Hapus */}
+                    <button onClick={(e) => { e.stopPropagation(); setMenuTerbuka(menuTerbuka === perangkat.serial ? null : perangkat.serial); }} className="p-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition"><MoreVertical className="w-4 h-4" /></button>
                     {menuTerbuka === perangkat.serial && (
-                      <div className="absolute right-0 mt-2 w-36 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden font-sans py-1 animate-in fade-in duration-150">
-                        <button 
-                          onClick={() => {
-                            setIdSedangDiedit(perangkat.serial);
-                            setDataForm({
-                              name: perangkat.name,
-                              serial: perangkat.serial,
-                              model: perangkat.model,
-                              wifi: perangkat.wifi,
-                              ip: perangkat.ip,
-                              mac: perangkat.mac
-                            });
-                            setMenuTerbuka(null);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white text-left transition"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-indigo-400" />
-                          {teks.btnEdit}
-                        </button>
-                        
-                        <button 
-                          onClick={() => {
-                            hapusPerangkatPermanen(perangkat.serial);
-                            setMenuTerbuka(null);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 text-left transition border-t border-slate-800/60"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          {teks.btnDelete}
-                        </button>
+                      <div className="absolute right-0 mt-2 w-40 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden font-sans py-1 animate-in fade-in duration-150">
+                        <button onClick={() => { setIdSedangDiedit(perangkat.serial); setDataForm({ name: perangkat.name, serial: perangkat.serial, model: perangkat.model, wifi: perangkat.wifi, ip: perangkat.ip, mac: perangkat.mac }); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white text-left transition"><Edit2 className="w-3.5 h-3.5 text-indigo-400" />{teks.btnEdit}</button>
+                        <button onClick={() => hapusPerangkatPermanen(perangkat.serial)} className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 text-left transition border-t border-slate-800/60"><Trash2 className="w-3.5 h-3.5" />{teks.btnDelete}</button>
                       </div>
                     )}
                   </div>
@@ -719,11 +602,7 @@ export default function App() {
         </div>
       </main>
 
-      {notifikasi && (
-        <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500 animate-bounce">
-          {notifikasi}
-        </div>
-      )}
+      {notifikasi && <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500 animate-bounce">{notifikasi}</div>}
     </div>
   );
 }
