@@ -14,9 +14,7 @@ import {
   CheckCircle,
   XCircle,
   Activity,
-  Save,
-  Languages,
-  FileCode 
+  Languages 
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
@@ -230,11 +228,15 @@ export default function App() {
       const dataSinyalLive = petaOnline.get(kunciSerialReal);
       const statusAktif = petaOnline.has(kunciSerialReal);
 
+      // Agresif mengecek status AHK dari payload live root atau objek .info internal
+      const isAhkTargetRunning = dataSinyalLive 
+        ? (dataSinyalLive.info?.ahkEnabled === true || dataSinyalLive.ahkEnabled === true) 
+        : false;
+
       daftarHasilGabung.push({
         ...perangkat,
         isOnline: statusAktif,
-        // PERBAIKAN: Membaca status ahk dari info atau root live secara akurat
-        ahkEnabled: dataSinyalLive ? (dataSinyalLive.info?.ahkEnabled || dataSinyalLive.ahkEnabled || false) : (perangkat.ahkEnabled || false),
+        ahkEnabled: isAhkTargetRunning,
         ip: dataSinyalLive?.info?.ip || dataSinyalLive?.ip || perangkat.ip || '-',
         mac: dataSinyalLive?.info?.mac || dataSinyalLive?.mac || perangkat.mac || '-',
         wifi: dataSinyalLive?.info?.wifi || dataSinyalLive?.wifi || perangkat.wifi || '-',
@@ -249,6 +251,8 @@ export default function App() {
       const kunciLiveSerial = live.id.trim().toLowerCase();
 
       if (!serialTerprosesDariDb.has(kunciLiveSerial)) {
+        const isAhkLiveOnlyRunning = live.info?.ahkEnabled === true || live.ahkEnabled === true;
+        
         daftarHasilGabung.push({
           id: `auto-${live.id}`,
           name: live.info?.hostname || live.hostname || 'New Client Node',
@@ -258,7 +262,7 @@ export default function App() {
           ip: live.info?.ip || live.ip || '-',
           mac: live.info?.mac || live.mac || '-',
           isOnline: true,
-          ahkEnabled: live.info?.ahkEnabled || live.ahkEnabled || false,
+          ahkEnabled: isAhkLiveOnlyRunning,
           terbacaOtomatisBelumDisimpan: true
         });
       }
@@ -670,7 +674,7 @@ export default function App() {
                   </button>
                 </div>
               </div>
-            )
+            ))
           )}
         </div>
       </main>
