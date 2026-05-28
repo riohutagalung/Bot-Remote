@@ -108,9 +108,11 @@ app.delete("/api/devices/:id", (req, res) => {
   res.status(404).json({ error: "Perangkat tidak ditemukan" });
 });
 
-// 3. API KIRIM PERINTAH ON/OFF KE LAPTOP
+// ====================================================================================
+// 3. API KIRIM PERINTAH ON/OFF KE LAPTOP (SUDAH DIPERBAIKI SINKRONISASI DATABASE)
+// ====================================================================================
 app.post("/api/command", (req, res) => {
-  const { deviceId, command } = req.body || {};
+  const { deviceId, command, scriptName } = req.body || {};
   if (!deviceId || !command) return res.status(400).json({ error: "Data kurang" });
 
   const cleanId = deviceId.toString().trim().toLowerCase();
@@ -120,7 +122,29 @@ app.post("/api/command", (req, res) => {
     return res.status(404).json({ error: "Laptop sedang Offline, tidak bisa menerima perintah remote." });
   }
 
-  clientWs.send(JSON.stringify({ type: "execute_command", action: command }));
+  // Tentukan status boolean ahk baru berdasarkan string command yang masuk
+  const isSettingToOn = command === 'start_ahk';
+
+  // Perbarui data di memori & database cloud_devices.json secara presisi
+  if (savedDevices[cleanId]) {
+    savedDevices[cleanId] = {
+      ...savedDevices[cleanId],
+      ahkEnabled: isSettingToOn,
+      lastSeen: new Date()
+    };
+    saveCloudData(savedDevices);
+  }
+
+  // Kirim data eksekusi ke client Windows (termasuk opsional nama script)
+  clientWs.send(JSON.stringify({ 
+    type: "execute_command", 
+    action: command,
+    scriptName: scriptName || ""
+  }));
+
+  // Semburkan perubahan terbaru ke Web UI lewat WebSocket Broadcast secara instan
+  broadcastToWeb();
+
   res.json({ success: true });
 });
 
@@ -165,6 +189,10 @@ wss.on("connection", (ws) => {
         
         deviceConnections.set(cleanId, ws);
 
+        // Pertahankan status ahkEnabled yang lama jika ada, kecuali jika dikirimkan status baru dari client
+        const existingAhkStatus = savedDevices[cleanId] ? savedDevices[cleanId].ahkEnabled : false;
+        const incomingAhkStatus = typeof data.ahkEnabled === 'boolean' ? data.ahkEnabled : existingAhkStatus;
+
         // Simpan / Update data permanen di Cloud Data
         savedDevices[cleanId] = {
           id: data.id.toString().trim(),
@@ -175,7 +203,7 @@ wss.on("connection", (ws) => {
           wifi: data.wifi || "-",
           ip: data.ip || "-",
           mac: data.mac || "-",
-          ahkEnabled: typeof data.ahkEnabled === 'boolean' ? data.ahkEnabled : false,
+          ahkEnabled: incomingAhkStatus,
           lastSeen: new Date()
         };
 
@@ -197,7 +225,10 @@ function broadcastToWeb() {
   const devicesArray = Object.values(savedDevices).map(device => {
     const cleanId = device.id.toString().trim().toLowerCase();
     const isLive = deviceConnections.has(cleanId) && deviceConnections.get(cleanId).readyState === 1;
-    return { ...device, status: isLive ? "Online" : "Offline" };
+    return { 
+      ...device, 
+      status: isLive ? "Online" : "Offline" 
+    };
   });
 
   wss.clients.forEach((client) => {

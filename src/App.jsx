@@ -13,9 +13,7 @@ import {
   CheckCircle,
   XCircle,
   Activity,
-  Languages,
   MoreVertical,
-  Save,
   Edit2
 } from 'lucide-react';
 
@@ -129,7 +127,6 @@ const KAMUS_BAHASA = {
 };
 
 export default function App() {
-  // Mengunci default bahasa ke English (EN) sesuai request abang
   const [bahasa, setBahasa] = useState('EN');
   const teks = KAMUS_BAHASA[bahasa];
 
@@ -147,7 +144,6 @@ export default function App() {
   const [namaScriptInput, setNamaScriptInput] = useState({});
   const [activeDropdown, setActiveDropdown] = useState(null);
 
-  // State untuk kontrol Custom Modal Bertema khusus (Pengganti window.confirm / alert)
   const [modalConfig, setModalConfig] = useState({
     isOpen: false,
     title: '',
@@ -168,7 +164,6 @@ export default function App() {
     setCekSesiSelesai(true);
   }, []);
 
-  // Menutup dropdown menu jika klik di luar area komponen
   useEffect(() => {
     const closeAllDropdowns = () => setActiveDropdown(null);
     window.addEventListener('click', closeAllDropdowns);
@@ -241,7 +236,6 @@ export default function App() {
     setTimeout(() => setNotifikasi(null), 3000);
   };
 
-  // Helper Custom Pop-up Modal Bertema Pengganti window.confirm bawaan browser
   const triggerCustomConfirm = (title, message, isDanger, onConfirmBlock) => {
     setModalConfig({
       isOpen: true,
@@ -255,6 +249,7 @@ export default function App() {
     });
   };
 
+  // 🛠️ PERBAIKAN UTAMA: Penentuan boolean ahkEnabled yang presisi & mutakhir
   const masterDaftarPerangkat = useMemo(() => {
     const daftarHasilGabung = [];
     const petaOnline = new Map();
@@ -274,10 +269,15 @@ export default function App() {
       const dataSinyalLive = petaOnline.get(kunciSerial);
       const statusAktif = petaOnline.has(kunciSerial);
 
+      // Gunakan nullish coalescing (??) agar nilai false dari websocket tidak dilewati logika OR
+      const statusAhkTerbaru = dataSinyalLive !== undefined 
+        ? (dataSinyalLive.ahkEnabled ?? false) 
+        : (perangkat.ahkEnabled ?? false);
+
       daftarHasilGabung.push({
         ...perangkat,
         isOnline: statusAktif,
-        ahkEnabled: dataSinyalLive ? (dataSinyalLive.ahkEnabled || false) : (perangkat.ahkEnabled || false),
+        ahkEnabled: statusAhkTerbaru,
         ip: dataSinyalLive?.info?.ip || perangkat.ip || '-',
         mac: dataSinyalLive?.info?.mac || perangkat.mac || '-',
         wifi: dataSinyalLive?.info?.wifi || perangkat.wifi || '-',
@@ -301,7 +301,7 @@ export default function App() {
           ip: live.info?.ip || '-',
           mac: live.info?.mac || '-',
           isOnline: true,
-          ahkEnabled: live.ahkEnabled || false,
+          ahkEnabled: live.ahkEnabled ?? false,
           terbacaOtomatisBelumDisimpan: true
         });
       }
@@ -379,11 +379,8 @@ export default function App() {
     }
   };
 
-  // Mekanisme Double Confirmation Menggunakan Custom Theme Pop-up Modal 
   const hapusPerangkatPermanen = (serialTarget) => {
-    // Konfirmasi Tingkat Pertama (Custom Modal UI)
     triggerCustomConfirm(teks.modalConfirmTitle, teks.confirmDelete1, false, () => {
-      // Konfirmasi Tingkat Kedua (Custom Modal UI - Alur Bahaya / Danger Workflows)
       setTimeout(() => {
         triggerCustomConfirm(teks.modalDangerTitle, teks.confirmDelete2, true, async () => {
           try {
@@ -482,18 +479,17 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute top-4 right-4 z-50">
-          {/* Tombol Bendera Gambar Resmi di Halaman Login */}
-<button 
-  onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
-  className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition shadow-md"
->
-  <img 
-    src={bahasa === 'ID' ? "https://flagcdn.com/w20/id.png" : "https://flagcdn.com/w20/us.png"} 
-    alt="flag" 
-    className="w-4 h-auto rounded-sm object-cover object-center"
-  />
-  <span>{bahasa === 'ID' ? 'ID' : 'ENG'}</span>
-</button>
+          <button 
+            onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition shadow-md"
+          >
+            <img 
+              src={bahasa === 'ID' ? "https://flagcdn.com/w20/id.png" : "https://flagcdn.com/w20/us.png"} 
+              alt="flag" 
+              className="w-4 h-auto rounded-sm object-cover object-center"
+            />
+            <span>{bahasa === 'ID' ? 'ID' : 'ENG'}</span>
+          </button>
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_60%)]" />
         <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
@@ -539,18 +535,17 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          {/* Tombol Bendera Gambar Resmi di Header Dashboard */}
-<button 
-  onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
-  className="flex items-center gap-2 px-3 py-1.5 bg-slate-850 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
->
-  <img 
-    src={bahasa === 'ID' ? "https://flagcdn.com/w20/id.png" : "https://flagcdn.com/w20/us.png"} 
-    alt="flag" 
-    className="w-4 h-auto rounded-sm object-cover object-center"
-  />
-  <span>{bahasa === 'ID' ? 'ID' : 'ENG'}</span>
-</button>
+          <button 
+            onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-850 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
+          >
+            <img 
+              src={bahasa === 'ID' ? "https://flagcdn.com/w20/id.png" : "https://flagcdn.com/w20/us.png"} 
+              alt="flag" 
+              className="w-4 h-auto rounded-sm object-cover object-center"
+            />
+            <span>{bahasa === 'ID' ? 'ID' : 'ENG'}</span>
+          </button>
           
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold font-mono border ${wsTerhubung ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'}`}>
             <Radio className={`w-3.5 h-3.5 ${wsTerhubung ? 'animate-pulse' : ''}`} />
@@ -719,7 +714,7 @@ export default function App() {
                     {!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}
                   </button>
 
-                  {/* IMPLEMENTASI BUTTON TITIK TIGA YANG ELEGAN & RAPI */}
+                  {/* Dropdown Menu Titik Tiga */}
                   <div className="relative">
                     <button 
                       onClick={(e) => {
@@ -732,22 +727,9 @@ export default function App() {
                       <MoreVertical className="w-4 h-4" />
                     </button>
 
-                    {/* Dropdown Menu Box */}
+                    {/* Konten Dropdown Menu */}
                     {activeDropdown === perangkat.serial && (
                       <div className="absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100">
-                        {/* Opsi 1: Simpan atau Override Baseline */}
-                        <button 
-                          onClick={() => {
-                            simpanKeDatabasePusat(perangkat);
-                            setActiveDropdown(null);
-                          }}
-                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition text-left"
-                        >
-                          <Save className="w-3.5 h-3.5 text-indigo-400" />
-                          {teks.formBtnSave}
-                        </button>
-
-                        {/* Opsi 2: Ubah Data Manual */}
                         <button 
                           onClick={() => {
                             setIdSedangDiedit(perangkat.serial);
@@ -759,25 +741,18 @@ export default function App() {
                               ip: perangkat.ip,
                               mac: perangkat.mac
                             });
-                            setActiveDropdown(null);
-                            window.scrollTo({ top: 120, behavior: 'smooth' });
                           }}
-                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition text-left border-t border-slate-800/60"
+                          className="w-full px-4 py-2.5 text-left text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2 transition"
                         >
-                          <Edit2 className="w-3.5 h-3.5 text-cyan-400" />
+                          <Edit2 className="w-3.5 h-3.5 text-indigo-400" />
                           {teks.btnEdit}
                         </button>
-
-                        {/* Opsi 3: Hapus Data Permanen */}
                         <button 
-                          onClick={() => {
-                            hapusPerangkatPermanen(perangkat.serial);
-                            setActiveDropdown(null);
-                          }}
-                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-rose-400 hover:bg-rose-950/40 transition text-left border-t border-slate-800/60"
+                          onClick={() => hapusPerangkatPermanen(perangkat.serial)}
+                          className="w-full px-4 py-2.5 text-left text-xs text-rose-400 hover:bg-rose-950/40 flex items-center gap-2 transition border-t border-slate-800"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          {teks.logout === "Keluar" ? "Hapus Permanen" : "Purge Database"}
+                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                          Hapus Laptop
                         </button>
                       </div>
                     )}
@@ -789,45 +764,39 @@ export default function App() {
         </div>
       </main>
 
-      {/* ==================================================================== */}
-      {/* CUSTOM POP-UP CONFIRMATION MODAL (TEMA DASHBOARD CYBERPUNK SLATE)   */}
-      {/* ==================================================================== */}
+      {/* Floating Status Notification Toast */}
+      {notifikasi && (
+        <div className="fixed bottom-5 right-5 bg-slate-900 border border-slate-700 text-slate-200 px-4 py-3 rounded-2xl shadow-2xl text-xs font-mono flex items-center gap-2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+          {notifikasi}
+        </div>
+      )}
+
+      {/* Custom Bertema Modal UI (Pengganti window.confirm) */}
       {modalConfig.isOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-xl ${modalConfig.isDanger ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}`}>
-                <AlertCircle className="w-5 h-5" />
-              </div>
-              <h3 className={`text-sm font-black tracking-tight uppercase ${modalConfig.isDanger ? 'text-rose-400' : 'text-white'}`}>
-                {modalConfig.title}
-              </h3>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed font-medium">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl max-w-sm w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+            <h3 className={`text-sm font-black uppercase tracking-wider ${modalConfig.isDanger ? 'text-rose-500' : 'text-indigo-400'}`}>
+              {modalConfig.title}
+            </h3>
+            <p className="text-xs text-slate-300 font-mono leading-relaxed">
               {modalConfig.message}
             </p>
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 justify-end pt-2">
               <button 
                 onClick={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
-                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-xl text-xs transition"
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition"
               >
                 {teks.modalCancel}
               </button>
               <button 
                 onClick={modalConfig.onConfirm}
-                className={`flex-1 font-bold py-2 rounded-xl text-xs text-white transition ${modalConfig.isDanger ? 'bg-rose-600 hover:bg-rose-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}
+                className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition ${modalConfig.isDanger ? 'bg-rose-600 hover:bg-rose-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}
               >
                 {teks.modalContinue}
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Notifikasi Toast */}
-      {notifikasi && (
-        <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500 animate-bounce">
-          {notifikasi}
         </div>
       )}
     </div>
