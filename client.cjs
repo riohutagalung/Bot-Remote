@@ -7,139 +7,123 @@ const fs = require("fs");
 const SERVER_URL = "wss://bot-remote-production.up.railway.app";
 const CURRENT_DIR = process.pkg ? path.dirname(process.execPath) : __dirname;
 
+let statusAhkSaatIni = false;
+let wsGlobal = null;
+
 function getSystemInfo() {
   return {
     hostname: os.hostname(),
     platform: os.platform(),
     arch: os.arch(),
     username: os.userInfo().username,
-    serial: getSerialNumber(),
-    ip: getLocalIP(),
-    mac: getMACAddress(),
-    wifi: getWifiSSID(),
+    serial: getSerial(),
+    ip: getIP(),
+    mac: getMAC(),
+    wifi: getWifi()
   };
 }
 
-function getSerialNumber() {
+function getSerial() {
   try {
     if (os.platform() === "win32") {
-      const output = execSync("wmic bios get serialnumber /value", { encoding: "utf8" });
-      const match = output.match(/SerialNumber=(\S+)/);
-      return match && match[1] && match[1] !== "To" ? match[1] : "UNKNOWN_SERIAL";
+      const o = execSync("wmic bios get serialnumber /value", { encoding: "utf8" });
+      const m = o.match(/SerialNumber=(\S+)/);
+      return m ? m[1] : "UNKNOWN";
     }
-    return "NON_WINDOWS_DEV";
-  } catch {
-    return "UNKNOWN_SERIAL";
-  }
+  } catch {}
+  return "UNKNOWN";
 }
-
-function getWifiSSID() {
+function getWifi() {
   try {
     if (os.platform() === "win32") {
-      const output = execSync("netsh wlan show interfaces", { encoding: "utf8" });
-      const match = output.match(/SSID\s*:\s*(.+)/);
-      return match ? match[1].trim() : "-";
+      const o = execSync("netsh wlan show interfaces", { encoding: "utf8" });
+      const m = o.match(/SSID\s*:\s*(.+)/);
+      return m ? m[1].trim() : "-";
     }
-    return "-";
-  } catch {
-    return "-";
-  }
+  } catch {}
+  return "-";
 }
-
-function getLocalIP() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === "IPv4" && !iface.internal) return iface.address;
-    }
+function getIP() {
+  const i = os.networkInterfaces();
+  for (const n of Object.keys(i)) {
+    for (const f of i[n]) if (f.family === "IPv4" && !f.internal) return f.address;
+  }
+  return "-";
+}
+function getMAC() {
+  const i = os.networkInterfaces();
+  for (const n of Object.keys(i)) {
+    for (const f of i[n])
+      if (f.mac && f.mac !== "00:00:00:00:00:00") return f.mac;
   }
   return "-";
 }
 
-function getMACAddress() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.mac && iface.mac !== "00:00:00:00:00:00") return iface.mac;
-    }
-  }
-  return "-";
-}
-
-let statusAhkSaatIni = false;
-let wsGlobal = null;
-
-// ==========================================================
-// KONTROL OTOMATIS: MENCARI FILE AHK SECARA DINAMIS
-// ==========================================================
+// ============================================================
+// START / STOP
+// ============================================================
 function kendalikanAhkBalikLayar(aksi, namaScriptKustom = "") {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     if (os.platform() !== "win32") return resolve();
 
-    let cmd = "";
     if (aksi === "start") {
       let fileTarget = namaScriptKustom;
-
-      // Jika web tidak mengirim nama script spesifik, cari file .ahk pertama
       if (!fileTarget) {
         try {
           const files = fs.readdirSync(CURRENT_DIR);
           const ahkFiles = files.filter(f => f.toLowerCase().endsWith(".ahk"));
           if (ahkFiles.length > 0) fileTarget = ahkFiles[0];
-        } catch (e) {
-          console.error("Gagal membaca folder script:", e.message);
-        }
+        } catch (e) { console.error("Gagal membaca folder:", e.message); }
       }
-
-      if (fileTarget) {
-        const fullScriptPath = path.join(CURRENT_DIR, fileTarget);
-
-        // ✅ PERBAIKAN: string literal valid
-        cmd = `start "" "AutoHotkey.exe" "${fullScriptPath}"`;
-        console.log(`[Dynamic Exec] Menjalankan script via engine: ${fullScriptPath}`);
-      } else {
-        console.log("[Alert] Tidak ada file .ahk ditemukan di folder ini!");
+      if (!fileTarget) {
+        console.log("[Alert] Tidak ada script .ahk ditemukan.");
         return resolve();
       }
+
+      const fullScript = path.join(CURRENT_DIR, fileTarget);
+      // 🔧 jalankan langsung file .ahk — Windows akan buka dengan AHK bawaan
+      exec(`start "" "${fullScript}"`, () => {
+        console.log(`[Exec] Menjalankan: ${fullScript}`);
+        setTimeout(() => { periksaStatusAktif(); resolve(); }, 1000);
+      });
     } else if (aksi === "stop") {
-      // Matikan semua kemungkinan proses AutoHotkey
-      cmd = [
-        `taskkill /f /im AutoHotkey.exe >nul 2>nul`,
-        `taskkill /f /im AutoHotkeyU64.exe >nul 2>nul`,
-        `taskkill /f /im AutoHotkeyU32.exe >nul 2>nul`
-      ].join(" & ");
-      console.log("[Dynamic Exec] Menonaktifkan semua AutoHotkey process");
+      console.log("[Exec] Mengirim F8 untuk menonaktifkan AHK…");
+      // Kirim F8 global
+      exec(
+        `powershell -Command "$wshell = New-Object -ComObject wscript.shell; $wshell.SendKeys('{F8}')"`
+      , () => {
+        // Pastikan mati kalau script tidak meng-handle F8
+        setTimeout(() => {
+          exec(
+            `taskkill /IM AutoHotkey.exe /F >nul 2>nul & taskkill /IM AutoHotkeyU64.exe /F >nul 2>nul & taskkill /IM AutoHotkeyU32.exe /F >nul 2>nul`,
+            () => { periksaStatusAktif(); resolve(); }
+          );
+        }, 1500);
+      });
     }
-
-    exec(cmd, () => {
-      setTimeout(() => {
-        periksaStatusAktifWindows();
-        resolve();
-      }, 1000);
-    });
   });
 }
 
-function periksaStatusAktifWindows() {
+// ============================================================
+// CEK STATUS PROSES
+// ============================================================
+function periksaStatusAktif() {
   if (os.platform() !== "win32") return;
-  exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, stdout) => {
-    let sedangJalan = false;
-    if (!err && stdout.toLowerCase().includes("autohotkey.exe")) sedangJalan = true;
-
-    if (statusAhkSaatIni !== sedangJalan) {
-      statusAhkSaatIni = sedangJalan;
-      paksaKirimTelemetri();
+  exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, out) => {
+    const active = !err && out.toLowerCase().includes("autohotkey.exe");
+    if (statusAhkSaatIni !== active) {
+      statusAhkSaatIni = active;
+      kirimTelemetri();
     }
   });
 }
 
-function paksaKirimTelemetri() {
+function kirimTelemetri() {
   if (wsGlobal && wsGlobal.readyState === WebSocket.OPEN) {
     const info = getSystemInfo();
-    const cleanId = info.serial.replace(/[^\w-]/g, "_");
-
     const payload = {
-      id: cleanId,
+      id: info.serial.replace(/[^\w-]/g, "_"),
+      type: "ahk_status",
       ahkEnabled: statusAhkSaatIni,
       hostname: info.hostname,
       model: `${info.platform} (${info.arch})`,
@@ -148,46 +132,40 @@ function paksaKirimTelemetri() {
       mac: info.mac
     };
     wsGlobal.send(JSON.stringify(payload));
+    console.log(
+      `[Telemetry] Status dikirim => ${statusAhkSaatIni ? "RUNNING" : "OFF"}`
+    );
   }
 }
 
-function connectToServer() {
+// ============================================================
+// WEBSOCKET
+// ============================================================
+function connect() {
   const ws = new WebSocket(SERVER_URL);
   wsGlobal = ws;
-  let intervalPingTelemetri;
-  let intervalCekTasklist;
-
   ws.on("open", () => {
-    console.log("✔ Connected to remote server safely");
-    periksaStatusAktifWindows();
-    intervalPingTelemetri = setInterval(paksaKirimTelemetri, 10000);
-    intervalCekTasklist = setInterval(periksaStatusAktifWindows, 3000);
+    console.log("✔ Connected to remote server");
+    periksaStatusAktif();
+    setInterval(periksaStatusAktif, 3000);
+    setInterval(kirimTelemetri, 10000);
   });
 
-  ws.on("message", (message) => {
+  ws.on("message", msg => {
     try {
-      const data = JSON.parse(message.toString());
-      if (data && data.type === "execute_command" && data.action) {
-        if (data.action === "start_ahk") {
-          kendalikanAhkBalikLayar("start", data.scriptName || "");
-        } else if (data.action === "stop_ahk") {
-          kendalikanAhkBalikLayar("stop");
-        }
+      const data = JSON.parse(msg.toString());
+      if (data && data.type === "execute_command") {
+        if (data.action === "start_ahk") kendalikanAhkBalikLayar("start", data.scriptName || "");
+        if (data.action === "stop_ahk") kendalikanAhkBalikLayar("stop");
       }
-    } catch (err) {
-      console.error(err.message);
-    }
+    } catch (e) { console.error(e.message); }
   });
 
   ws.on("close", () => {
-    clearInterval(intervalPingTelemetri);
-    clearInterval(intervalCekTasklist);
-    console.log("⚠ Connection closed, retrying...");
-    setTimeout(connectToServer, 5000);
+    console.log("⚠ WS closed, retrying...");
+    setTimeout(connect, 5000);
   });
-
-  ws.on("error", () => {});
 }
 
-console.log("Starting remote client (Modular Dynamic Edition)…");
-connectToServer();
+console.log("Starting RH Remote Client (Enhanced Control Edition)...");
+connect();
