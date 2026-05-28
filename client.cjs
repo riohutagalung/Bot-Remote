@@ -1,13 +1,21 @@
+// ============================================================
+// RH Remote Client (AutoHotkey Controller) - Fixed full version
+// ============================================================
+
 const WebSocket = require("ws");
 const { exec, execSync } = require("child_process");
 const os = require("os");
 const path = require("path");
-const fs = require("fs"); // Menambahkan File System bawaan
+const fs = require("fs");
 
 const SERVER_URL = "wss://bot-remote-production.up.railway.app";
-// Ambil folder tempat client.exe dijalankan secara dinamis
+
+// Folder saat ini, baik dijalankan dari NodeJS maupun file .exe hasil pkg
 const CURRENT_DIR = process.pkg ? path.dirname(process.execPath) : __dirname;
 
+// =====================
+// UTILITAS SISTEM
+// =====================
 function getSystemInfo() {
   return {
     hostname: os.hostname(),
@@ -29,7 +37,9 @@ function getSerialNumber() {
       return match && match[1] && match[1] !== "To" ? match[1] : "UNKNOWN_SERIAL";
     }
     return "NON_WINDOWS_DEV";
-  } catch { return "UNKNOWN_SERIAL"; }
+  } catch {
+    return "UNKNOWN_SERIAL";
+  }
 }
 
 function getWifiSSID() {
@@ -40,7 +50,9 @@ function getWifiSSID() {
       return match ? match[1].trim() : "-";
     }
     return "-";
-  } catch { return "-"; }
+  } catch {
+    return "-";
+  }
 }
 
 function getLocalIP() {
@@ -63,12 +75,15 @@ function getMACAddress() {
   return "-";
 }
 
+// ============================================================
+// VARIABEL GLOBAL
+// ============================================================
 let statusAhkSaatIni = false;
 let wsGlobal = null;
 
-// ==========================================================
-// KONTROL OTOMATIS: MENCARI FILE AHK SECARA DINAMIS
-// ==========================================================
+// ============================================================
+// KONTROL AUTOMATIS: JALANKAN / MATIKAN AHK
+// ============================================================
 function kendalikanAhkBalikLayar(aksi, namaScriptKustom = "") {
   return new Promise((resolve) => {
     if (os.platform() !== "win32") return resolve();
@@ -77,24 +92,19 @@ function kendalikanAhkBalikLayar(aksi, namaScriptKustom = "") {
     if (aksi === "start") {
       let fileTarget = namaScriptKustom;
 
-      // Jika web tidak mengirim nama script spesifik, cari file .ahk pertama di folder
       if (!fileTarget) {
         try {
           const files = fs.readdirSync(CURRENT_DIR);
           const ahkFiles = files.filter(f => f.toLowerCase().endsWith(".ahk"));
-          if (ahkFiles.length > 0) {
-            fileTarget = ahkFiles[0]; // Ambil file AHK pertama yang ditemukan
-          }
-        } catch (e) { console.error("Gagal membaca folder script:", e.message); }
+          if (ahkFiles.length > 0) fileTarget = ahkFiles[0];
+        } catch (e) {
+          console.error("Gagal membaca folder script:", e.message);
+        }
       }
 
       if (fileTarget) {
         const fullScriptPath = path.join(CURRENT_DIR, fileTarget);
-        
-        // =======================================================================
-        // PERBAIKAN DI SINI: Memanggil AutoHotkey.exe secara absolut agar Windows
-        // tidak tersesat mencari path file saat aplikasi berjalan di mode Startup.
-        // =======================================================================
+        // Jalankan AutoHotkey engine secara absolut
         cmd = `start "" "AutoHotkey.exe" "${fullScriptPath}"`;
         console.log(`[Dynamic Exec] Menjalankan script via engine: ${fullScriptPath}`);
       } else {
@@ -103,26 +113,25 @@ function kendalikanAhkBalikLayar(aksi, namaScriptKustom = "") {
       }
     } else if (aksi === "stop") {
       cmd = `taskkill /f /im AutoHotkey.exe || exit 0`;
+      console.log("[Dynamic Exec] Mematikan semua session AutoHotkey.exe");
     }
 
     exec(cmd, () => {
       setTimeout(() => {
         periksaStatusAktifWindows();
         resolve();
-      }, 1000);
+      }, 800);
     });
   });
 }
 
+// ============================================================
+// MONITORING STATUS PROSES AUTOHOTKEY
+// ============================================================
 function periksaStatusAktifWindows() {
   if (os.platform() !== "win32") return;
-
   exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, stdout) => {
-    let sedangJalan = false;
-    if (!err && stdout.toLowerCase().includes("autohotkey.exe")) {
-      sedangJalan = true;
-    }
-    
+    const sedangJalan = !err && stdout.toLowerCase().includes("autohotkey.exe");
     if (statusAhkSaatIni !== sedangJalan) {
       statusAhkSaatIni = sedangJalan;
       paksaKirimTelemetri();
@@ -130,12 +139,16 @@ function periksaStatusAktifWindows() {
   });
 }
 
+// ============================================================
+// KIRIM TELEMETRI KE SERVER
+// ============================================================
 function paksaKirimTelemetri() {
   if (wsGlobal && wsGlobal.readyState === WebSocket.OPEN) {
     const info = getSystemInfo();
     const cleanId = info.serial.replace(/[^\w-]/g, "_");
 
     const payload = {
+      type: "ahk_status",          // <=== penting agar server paham
       id: cleanId,
       ahkEnabled: statusAhkSaatIni,
       hostname: info.hostname,
@@ -144,20 +157,38 @@ function paksaKirimTelemetri() {
       ip: info.ip,
       mac: info.mac
     };
+
     wsGlobal.send(JSON.stringify(payload));
+    console.log(`[Telemetry] Status AHK dikirim => ${statusAhkSaatIni ? "ON" : "OFF"}`);
   }
 }
 
+// ============================================================
+// HUBUNGAN WEBSOCKET KE SERVER
+// ============================================================
 function connectToServer() {
   const ws = new WebSocket(SERVER_URL);
   wsGlobal = ws;
   let intervalPingTelemetri;
   let intervalCekTasklist;
+  const info = getSystemInfo();
+  const cleanId = info.serial.replace(/[^\w-]/g, "_");
 
   ws.on("open", () => {
-    console.log("✔ Connected to remote server safely");
+    console.log("✔ Connected to remote RH Cloud Server");
+    // handshake awal kirim identitas device
+    ws.send(JSON.stringify({
+      id: cleanId,
+      hostname: info.hostname,
+      model: `${info.platform} (${info.arch})`,
+      wifi: info.wifi,
+      ip: info.ip,
+      mac: info.mac,
+      ahkEnabled: statusAhkSaatIni
+    }));
+
     periksaStatusAktifWindows();
-    intervalPingTelemetri = setInterval(paksaKirimTelemetri, 10000); 
+    intervalPingTelemetri = setInterval(paksaKirimTelemetri, 10000);
     intervalCekTasklist = setInterval(periksaStatusAktifWindows, 3000);
   });
 
@@ -165,24 +196,37 @@ function connectToServer() {
     try {
       const data = JSON.parse(message.toString());
       if (data && data.type === "execute_command" && data.action) {
-        // Mendukung penembakan nama script spesifik dari Web jika ada data.scriptName
         if (data.action === "start_ahk") {
-          kendalikanAhkBalikLayar("start", data.scriptName || "");
+          kendalikanAhkBalikLayar("start", data.scriptName || "").then(() => {
+            statusAhkSaatIni = true;
+            paksaKirimTelemetri();
+          });
         } else if (data.action === "stop_ahk") {
-          kendalikanAhkBalikLayar("stop");
+          kendalikanAhkBalikLayar("stop").then(() => {
+            statusAhkSaatIni = false;
+            paksaKirimTelemetri();
+          });
         }
       }
-    } catch (err) { console.error(err.message); }
+    } catch (err) {
+      console.error("WS message error:", err.message);
+    }
   });
 
   ws.on("close", () => {
+    console.log("⚠ Connection closed, retrying in 5s...");
     clearInterval(intervalPingTelemetri);
     clearInterval(intervalCekTasklist);
     setTimeout(connectToServer, 5000);
   });
 
-  ws.on("error", () => {});
+  ws.on("error", (e) => {
+    console.error("❌ WebSocket error", e.message);
+  });
 }
 
-console.log("Starting remote client (Modular Dynamic Edition)...");
+// ============================================================
+// MULAI PROGRAM
+// ============================================================
+console.log("Starting RH Remote Client (Full Fixed Edition)...");
 connectToServer();
