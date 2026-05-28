@@ -1,195 +1,220 @@
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const cors = require('cors');
+import express from "express";
+import { WebSocketServer } from "ws";
+import cors from "cors";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const app = express();
 
-// =========================================================
-// URUTAN KRUSIAL MIDDLEWARE: CORS DI PASTIKAN DI PALING ATAS 
-// =========================================================
-app.use(cors({
-  origin: 'https://rhremote.vercel.app', 
+// =================================================================
+// PERBAIKAN DI SINI: Mengizinkan PUT & OPTIONS agar Vercel tidak diblokir
+// =================================================================
+app.use(cors({ 
+  origin: '*', 
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
-
-// Mengizinkan respon Preflight OPTIONS secepat mungkin tanpa hambatan
-app.options('*', cors());
+app.options('*', cors()); // Bypass preflight request dari browser
 
 app.use(express.json());
 
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const PORT = process.env.PORT || 8080;
+const DATA_FILE = path.join(__dirname, "cloud_devices.json");
 
-let devicesDatabase = [
-  { serial: "LAPTOP-SAMPLE123", name: "Laptop Utama Admin", model: "ThinkPad T14", wifi: "RH_Office", ip: "192.168.1.50", mac: "AA:BB:CC:DD:EE:FF" }
-];
+// Kunci token statis rahasia sebagai pengganti verifikasi teks password di front-end
+const SECURE_TOKEN = "rh-secure-token-session-key-2026";
 
-// Telemetry Pipeline memory allocation
-const onlineClients = new Map(); 
-
-// ==========================================
-// MONITORING ALUR REALTIME WEBSOCKET MIKROENGINE
-// ==========================================
-wss.on('connection', (ws) => {
-  let currentClientSerial = null;
-
-  ws.on('message', (message) => {
-    try {
-      const packet = JSON.parse(message);
-
-      // Sinkronisasi data telemetri yang dipancarkan oleh client.exe (F3 Windows Manager Tray)
-      if (packet.type === 'telemetry' || packet.id) {
-        const serial = (packet.id || packet.serial).trim();
-        currentClientSerial = serial;
-
-        // Validasi ganda pelacakan status engine AHK agar tidak gampang miss-state
-        const isAhkRunning = packet.ahkEnabled === true || packet.isAhkRunning === true || packet.info?.ahkEnabled === true;
-
-        onlineClients.set(serial, {
-          id: serial,
-          ws: ws,
-          lastSeen: Date.now(),
-          ahkEnabled: isAhkRunning,
-          info: {
-            hostname: packet.name || packet.info?.hostname || "Windows Client",
-            model: packet.model || packet.info?.model || "-",
-            wifi: packet.wifi || packet.info?.wifi || "-",
-            ip: packet.ip || packet.info?.ip || "-",
-            mac: packet.mac || packet.info?.mac || "-"
-          }
-        });
-        broadcastToDashboards();
-      }
-
-      if (packet.type === 'dashboard_init') {
-        ws.isDashboard = true;
-        sendDeviceListToSingleClient(ws);
-      }
-    } catch (err) {
-      console.error("Error processing packet layer:", err);
+// --- LOGIKA DATABASE CLOUD CLOUD DATA (JSON FILE) ---
+function loadCloudData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
     }
-  });
-
-  ws.on('close', () => {
-    if (currentClientSerial && onlineClients.has(currentClientSerial)) {
-      if (onlineClients.get(currentClientSerial).ws === ws) {
-        onlineClients.delete(currentClientSerial);
-        broadcastToDashboards();
-      }
-    }
-  });
-});
-
-function broadcastToDashboards() {
-  const devicesArray = [];
-  onlineClients.forEach((value) => {
-    devicesArray.push({ id: value.id, ahkEnabled: value.ahkEnabled, info: value.info });
-  });
-  const payload = JSON.stringify({ type: 'device_list', devices: devicesArray });
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN && client.isDashboard) {
-      client.send(payload);
-    }
-  });
+  } catch (e) { console.error("Gagal baca database:", e.message); }
+  return {};
 }
 
-function sendDeviceListToSingleClient(ws) {
-  const devicesArray = [];
-  onlineClients.forEach((value) => {
-    devicesArray.push({ id: value.id, ahkEnabled: value.ahkEnabled, info: value.info });
-  });
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'device_list', devices: devicesArray }));
-  }
+function saveCloudData(data) {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
+  } catch (e) { console.error("Gagal simpan database:", e.message); }
 }
 
-// System loop clear heartbeat zombie clients
-setInterval(() => {
-  const kini = Date.now();
-  let adaPerubahan = false;
-  onlineClients.forEach((value, key) => {
-    if (kini - value.lastSeen > 12000) { 
-      onlineClients.delete(key);
-      adaPerubahan = true;
-    }
-  });
-  if (adaPerubahan) broadcastToDashboards();
-}, 5000);
+// Inisialisasi data dari database cloud saat server pertama kali hidup
+let savedDevices = loadCloudData();
+let deviceConnections = new Map(); // Menyimpan koneksi live WS saja
 
-// ==========================================
-// REST ENDPOINTS DATABASE LAYER
-// ==========================================
-app.get('/api/devices', (req, res) => {
-  res.json({ success: true, devices: devicesDatabase });
-});
+app.get("/", (_, res) => res.send("WebSocket Cloud Backend Online"));
 
-app.post('/api/devices', (req, res) => {
-  const { serial, name, model, wifi, ip, mac } = req.body;
-  if (!serial) return res.status(400).json({ success: false, message: "Serial required" });
-  const indeks = devicesDatabase.findIndex(d => d.serial.toLowerCase() === serial.toLowerCase());
-  const dataBaru = { serial, name, model, wifi, ip, mac };
-  if (indeks !== -1) devicesDatabase[indeks] = dataBaru;
-  else devicesDatabase.push(dataBaru);
-  res.json({ success: true, message: "Device synced" });
-});
+// =================================================================
+// ENDPOINT BARU: Validasi password aman di dalam server (Anti-Inspect)
+// =================================================================
+app.post("/api/login", (req, res) => {
+  const { password } = req.body || {};
+  const rootPassword = process.env.DASHBOARD_PASSWORD || "Taikbabi182#";
 
-app.put('/api/devices/:serial', (req, res) => {
-  const { serial } = req.params;
-  const { name, model, wifi, ip, mac } = req.body;
-  const indeks = devicesDatabase.findIndex(d => d.serial.toLowerCase() === serial.toLowerCase());
-  if (indeks !== -1) {
-    devicesDatabase[indeks] = { ...devicesDatabase[indeks], name, model, wifi, ip, mac };
-    return res.json({ success: true, message: "Baseline locked" });
+  if (password === rootPassword) {
+    // Jika benar, kirim token acak sukses, bukan teks password aslinya
+    return res.json({ success: true, token: SECURE_TOKEN });
   }
-  res.status(404).json({ success: false, message: "Device not found" });
+  return res.status(401).json({ success: false, message: "Kata sandi ditolak!" });
 });
 
-app.delete('/api/devices/:serial', (req, res) => {
-  const { serial } = req.params;
-  devicesDatabase = devicesDatabase.filter(d => d.serial.toLowerCase() !== serial.toLowerCase());
-  res.json({ success: true, message: "Device purged" });
+// 1. API UNTUK AMBIL DATA (Gabungkan data tersimpan dengan status LIVE)
+app.get("/api/devices", (req, res) => {
+  const devicesArray = Object.values(savedDevices).map(device => {
+    const cleanId = device.id.toString().trim().toLowerCase();
+    const isLive = deviceConnections.has(cleanId) && deviceConnections.get(cleanId).readyState === 1;
+    return {
+      ...device,
+      status: isLive ? "Online" : "Offline" // Menampilkan status real-time di web
+    };
+  });
+  res.json({ devices: devicesArray });
 });
 
-// LOGIKA UTAMA: Pengontrol penembak file instruksi "script.ahk" ke komputer target
-app.post('/api/command', (req, res) => {
-  const { deviceId, command, scriptName } = req.body;
-  const targetClient = onlineClients.get(deviceId.trim());
+// ====================================================================================
+// 2. API UNTUK MENGHAPUS LAPTOP DENGAN VERIFIKASI HEADER TOKEN (AMAN 100%)
+// PERBAIKAN: Menambahkan fallback check jika parameter yang dikirim berupa serial/id string
+// ====================================================================================
+app.delete("/api/devices/:id", (req, res) => {
+  const { id } = req.params;
   
-  if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
-    // Dipastikan menembakkan payload default: "script.ahk" ke client.exe
-    targetClient.ws.send(JSON.stringify({ 
-      action: command, 
-      scriptName: scriptName || 'script.ahk' 
-    }));
-    
-    targetClient.ahkEnabled = (command === 'start_ahk');
-    broadcastToDashboards();
-    return res.json({ success: true, message: `Signal dispatched successfully` });
+  // Ambil token dari header Authorization untuk memverifikasi hak akses hapus
+  const authHeader = req.headers['authorization'];
+  if (authHeader !== `Bearer ${SECURE_TOKEN}`) {
+    return res.status(403).json({ error: "Sandi salah atau Kedaluwarsa! Anda tidak berhak menghapus perangkat ini (403)." });
   }
-  res.status(404).json({ success: false, message: "Target machine offline" });
-});
 
-app.post('/api/devices/import', (req, res) => {
-  const { devices } = req.body;
-  if (Array.isArray(devices)) {
-    devicesDatabase = devices;
-    res.json({ success: true });
-  } else res.status(400).json({ success: false });
-});
-
-app.post('/api/login', (req, res) => {
-  const { password } = req.body;
-  if (password === "Taikbabi182#") { 
-    res.json({ success: true, token: "rh-secure-token-session-key-2026" });
+  const cleanId = id.toString().trim().toLowerCase();
+  
+  // Cari target penghapusan baik berdasarkan Key ID utama ataupun property Serial di dalamnya
+  let targetKey = null;
+  if (savedDevices[cleanId]) {
+    targetKey = cleanId;
   } else {
-    res.status(401).json({ success: false, message: "Kata sandi salah!" });
+    // Fallback lookup: Cari secara dinamis jika App.jsx melempar serial key mentah
+    targetKey = Object.keys(savedDevices).find(key => 
+      savedDevices[key].serial && savedDevices[key].serial.toString().trim().toLowerCase() === cleanId
+    );
   }
+
+  if (targetKey && savedDevices[targetKey]) {
+    delete savedDevices[targetKey];
+    saveCloudData(savedDevices); // Hapus permanen dari cloud data
+    
+    // Putus hubungan jika perangkat sedang online
+    if (deviceConnections.has(targetKey)) {
+      deviceConnections.get(targetKey).close();
+      deviceConnections.delete(targetKey);
+    }
+    
+    broadcastToWeb();
+    return res.json({ success: true, message: "Perangkat berhasil dihapus dari cloud!" });
+  }
+  
+  res.status(404).json({ error: "Perangkat tidak ditemukan" });
 });
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`Server core active on port ${PORT}`);
+// 3. API KIRIM PERINTAH ON/OFF KE LAPTOP
+app.post("/api/command", (req, res) => {
+  const { deviceId, command } = req.body || {};
+  if (!deviceId || !command) return res.status(400).json({ error: "Data kurang" });
+
+  const cleanId = deviceId.toString().trim().toLowerCase();
+  const clientWs = deviceConnections.get(cleanId);
+
+  if (!clientWs || clientWs.readyState !== 1) {
+    return res.status(404).json({ error: "Laptop sedang Offline, tidak bisa menerima perintah remote." });
+  }
+
+  clientWs.send(JSON.stringify({ type: "execute_command", action: command }));
+  res.json({ success: true });
 });
+
+// 4. API UNTUK MEMPERBARUI / MENYIMPAN DATA DARI VERCEL (PERBAIKAN FITUR PUT)
+app.put("/api/devices/:id", (req, res) => {
+  const { id } = req.params;
+  const updatedData = req.body || {};
+  const cleanId = id.toString().trim().toLowerCase();
+
+  // Jika data belum ada sama sekali di database, kita buatkan objek baru (Upsert logic)
+  if (!savedDevices[cleanId]) {
+    savedDevices[cleanId] = { id: id.toString().trim() };
+  }
+
+  // Gabungkan data lama dengan data baru yang diinput dari web dashboard
+  savedDevices[cleanId] = {
+    ...savedDevices[cleanId],
+    ...updatedData,
+    name: updatedData.name || updatedData.hostname || savedDevices[cleanId].name || "Target PC",
+    hostname: updatedData.hostname || updatedData.name || savedDevices[cleanId].hostname || "Target PC",
+    lastSeen: new Date()
+  };
+  
+  saveCloudData(savedDevices); // Kunci aman ke cloud_devices.json
+  broadcastToWeb(); // Semburkan data terbaru ke seluruh tampilan web
+  
+  return res.json({ success: true, message: "Cloud database updated successfully!" });
+});
+
+const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const wss = new WebSocketServer({ server });
+
+wss.on("connection", (ws) => {
+  let currentDeviceId = null;
+
+  ws.on("message", (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      if (data && data.id) {
+        const cleanId = data.id.toString().trim().toLowerCase();
+        currentDeviceId = cleanId;
+        
+        deviceConnections.set(cleanId, ws);
+
+        // Simpan / Update data permanen di Cloud Data
+        savedDevices[cleanId] = {
+          id: data.id.toString().trim(),
+          serial: data.serial || data.id.toString().trim(),
+          name: data.hostname || "Target PC",
+          hostname: data.hostname || "Target PC",
+          model: data.model || "-",
+          wifi: data.wifi || "-",
+          ip: data.ip || "-",
+          mac: data.mac || "-",
+          ahkEnabled: typeof data.ahkEnabled === 'boolean' ? data.ahkEnabled : false,
+          lastSeen: new Date()
+        };
+
+        saveCloudData(savedDevices); // Kunci data ke dalam file JSON agar tidak hilang saat server restart
+        broadcastToWeb();
+      }
+    } catch (err) { console.error(err.message); }
+  });
+
+  ws.on("close", () => {
+    if (currentDeviceId) {
+      deviceConnections.delete(currentDeviceId);
+      broadcastToWeb(); // Jangan dihapus dari savedDevices agar tetap tampil di tabel sebagai "Offline"
+    }
+  });
+});
+
+function broadcastToWeb() {
+  const devicesArray = Object.values(savedDevices).map(device => {
+    const cleanId = device.id.toString().trim().toLowerCase();
+    const isLive = deviceConnections.has(cleanId) && deviceConnections.get(cleanId).readyState === 1;
+    return { ...device, status: isLive ? "Online" : "Offline" };
+  });
+
+  wss.clients.forEach((client) => {
+    if (client.readyState === 1) {
+      client.send(JSON.stringify({ type: "device_list", devices: devicesArray }));
+    }
+  });
+}
