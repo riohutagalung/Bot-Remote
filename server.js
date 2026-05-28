@@ -5,13 +5,17 @@ const cors = require('cors');
 
 const app = express();
 
-// Middleware CORS dipasang di paling atas
+// =========================================================
+// URUTAN KRUSIAL MIDDLEWARE: CORS DI PASTIKAN DI PALING ATAS 
+// =========================================================
 app.use(cors({
   origin: 'https://rhremote.vercel.app', 
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
+
+// Mengizinkan respon Preflight OPTIONS secepat mungkin tanpa hambatan
 app.options('*', cors());
 
 app.use(express.json());
@@ -23,8 +27,12 @@ let devicesDatabase = [
   { serial: "LAPTOP-SAMPLE123", name: "Laptop Utama Admin", model: "ThinkPad T14", wifi: "RH_Office", ip: "192.168.1.50", mac: "AA:BB:CC:DD:EE:FF" }
 ];
 
+// Telemetry Pipeline memory allocation
 const onlineClients = new Map(); 
 
+// ==========================================
+// MONITORING ALUR REALTIME WEBSOCKET MIKROENGINE
+// ==========================================
 wss.on('connection', (ws) => {
   let currentClientSerial = null;
 
@@ -32,10 +40,12 @@ wss.on('connection', (ws) => {
     try {
       const packet = JSON.parse(message);
 
+      // Sinkronisasi data telemetri yang dipancarkan oleh client.exe (F3 Windows Manager Tray)
       if (packet.type === 'telemetry' || packet.id) {
         const serial = (packet.id || packet.serial).trim();
         currentClientSerial = serial;
 
+        // Validasi ganda pelacakan status engine AHK agar tidak gampang miss-state
         const isAhkRunning = packet.ahkEnabled === true || packet.isAhkRunning === true || packet.info?.ahkEnabled === true;
 
         onlineClients.set(serial, {
@@ -59,7 +69,7 @@ wss.on('connection', (ws) => {
         sendDeviceListToSingleClient(ws);
       }
     } catch (err) {
-      console.error("Error parsing WS packet:", err);
+      console.error("Error processing packet layer:", err);
     }
   });
 
@@ -96,6 +106,7 @@ function sendDeviceListToSingleClient(ws) {
   }
 }
 
+// System loop clear heartbeat zombie clients
 setInterval(() => {
   const kini = Date.now();
   let adaPerubahan = false;
@@ -108,6 +119,9 @@ setInterval(() => {
   if (adaPerubahan) broadcastToDashboards();
 }, 5000);
 
+// ==========================================
+// REST ENDPOINTS DATABASE LAYER
+// ==========================================
 app.get('/api/devices', (req, res) => {
   res.json({ success: true, devices: devicesDatabase });
 });
@@ -119,7 +133,7 @@ app.post('/api/devices', (req, res) => {
   const dataBaru = { serial, name, model, wifi, ip, mac };
   if (indeks !== -1) devicesDatabase[indeks] = dataBaru;
   else devicesDatabase.push(dataBaru);
-  res.json({ success: true, message: "Device registered permanently" });
+  res.json({ success: true, message: "Device synced" });
 });
 
 app.put('/api/devices/:serial', (req, res) => {
@@ -128,7 +142,7 @@ app.put('/api/devices/:serial', (req, res) => {
   const indeks = devicesDatabase.findIndex(d => d.serial.toLowerCase() === serial.toLowerCase());
   if (indeks !== -1) {
     devicesDatabase[indeks] = { ...devicesDatabase[indeks], name, model, wifi, ip, mac };
-    return res.json({ success: true, message: "Device baseline updated" });
+    return res.json({ success: true, message: "Baseline locked" });
   }
   res.status(404).json({ success: false, message: "Device not found" });
 });
@@ -136,19 +150,26 @@ app.put('/api/devices/:serial', (req, res) => {
 app.delete('/api/devices/:serial', (req, res) => {
   const { serial } = req.params;
   devicesDatabase = devicesDatabase.filter(d => d.serial.toLowerCase() !== serial.toLowerCase());
-  res.json({ success: true, message: "Device purged successfully" });
+  res.json({ success: true, message: "Device purged" });
 });
 
+// LOGIKA UTAMA: Pengontrol penembak file instruksi "script.ahk" ke komputer target
 app.post('/api/command', (req, res) => {
   const { deviceId, command, scriptName } = req.body;
   const targetClient = onlineClients.get(deviceId.trim());
+  
   if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
-    targetClient.ws.send(JSON.stringify({ action: command, scriptName: scriptName || 'default.ahk' }));
+    // Dipastikan menembakkan payload default: "script.ahk" ke client.exe
+    targetClient.ws.send(JSON.stringify({ 
+      action: command, 
+      scriptName: scriptName || 'script.ahk' 
+    }));
+    
     targetClient.ahkEnabled = (command === 'start_ahk');
     broadcastToDashboards();
-    return res.json({ success: true, message: `Command dispatched` });
+    return res.json({ success: true, message: `Signal dispatched successfully` });
   }
-  res.status(404).json({ success: false, message: "Target client offline" });
+  res.status(404).json({ success: false, message: "Target machine offline" });
 });
 
 app.post('/api/devices/import', (req, res) => {
@@ -170,5 +191,5 @@ app.post('/api/login', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server core active on port ${PORT}`);
 });

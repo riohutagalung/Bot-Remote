@@ -7,14 +7,12 @@ import {
   Search, 
   Laptop, 
   Plus,
-  LogOut,
   Sliders,
   ShieldCheck,
   Radio,
   CheckCircle,
   XCircle,
   Activity,
-  Languages,
   MoreVertical,
   Edit2
 } from 'lucide-react';
@@ -46,7 +44,7 @@ const KAMUS_BAHASA = {
     formPlaceWifi: "Nama WiFi Target",
     formPlaceIp: "Alamat IP Lokal",
     formPlaceMac: "MAC Address",
-    formPlaceScript: "Nama Script AHK (Opsional)",
+    formPlaceScript: "Nama Script AHK (Default: script.ahk)",
     formBtnSave: "Simpan Permanen",
     formBtnCancel: "Batal",
     searchPlace: "Cari berdasarkan nama, serial key, IP, atau nama WiFi...",
@@ -91,7 +89,7 @@ const KAMUS_BAHASA = {
     formPlaceWifi: "Access Point SSID",
     formPlaceIp: "Local Network IP",
     formPlaceMac: "MAC Address Frame",
-    formPlaceScript: "AHK Script Name (Optional)",
+    formPlaceScript: "AHK Script Name (Default: script.ahk)",
     formBtnSave: "Commit to Database",
     formBtnCancel: "Cancel",
     searchPlace: "Query cluster by alias name, bios serial, IP route, or SSID...",
@@ -117,7 +115,8 @@ const KAMUS_BAHASA = {
 };
 
 export default function App() {
-  const [bahasa, setBahasa] = useState('ID');
+  // DEFAULT BAHASA ADALAH INGGRIS (EN) SESUAI REQUEST UTAMA
+  const [bahasa, setBahasa] = useState('EN');
   const teks = KAMUS_BAHASA[bahasa];
 
   const [sudahLogin, setSudahLogin] = useState(false);
@@ -154,7 +153,7 @@ export default function App() {
         setPerangkatDatabase(Array.isArray(hasil) ? hasil : hasil.devices || []);
       }
     } catch (err) {
-      console.error("Database connection synchronization failure:", err);
+      console.error("Database link error:", err);
     }
   };
 
@@ -187,7 +186,7 @@ export default function App() {
             setPerangkatOnlineLive(dataMasuk.devices || []);
           }
         } catch (galat) {
-          console.error('Failed to parse network signaling packet:', galat);
+          console.error('Network signalling error:', galat);
         }
       };
 
@@ -238,8 +237,9 @@ export default function App() {
       const dataSinyalLive = petaOnline.get(kunciSerial);
       const statusAktif = petaOnline.has(kunciSerial);
 
+      // LOGIKA UTAMA: Deteksi status aktif mesin AHK baik dari root property maupun telemetry tray windows manager
       const isAhkRunning = dataSinyalLive 
-        ? (dataSinyalLive.ahkEnabled === true || dataSinyalLive.info?.ahkEnabled === true)
+        ? (dataSinyalLive.ahkEnabled === true || dataSinyalLive.isAhkRunning === true || dataSinyalLive.info?.ahkEnabled === true)
         : (perangkat.ahkEnabled === true);
 
       daftarHasilGabung.push({
@@ -260,7 +260,7 @@ export default function App() {
       const kunciLiveSerial = live.id.trim().toLowerCase();
 
       if (!serialTerprosesDariDb.has(kunciLiveSerial)) {
-        const isAhkLiveOnlyRunning = live.ahkEnabled === true || live.info?.ahkEnabled === true;
+        const isAhkLiveOnlyRunning = live.ahkEnabled === true || live.isAhkRunning === true || live.info?.ahkEnabled === true;
         
         daftarHasilGabung.push({
           id: `auto-${live.id}`,
@@ -291,7 +291,8 @@ export default function App() {
   const ubahStatusAhk = async (perangkat) => {
     try {
       const aksiPerintah = perangkat.ahkEnabled ? 'stop_ahk' : 'start_ahk';
-      const scriptSpesifik = namaScriptInput[perangkat.serial] || "";
+      // Default pengiriman script disesuaikan spesifikasi abang: "script.ahk"
+      const scriptSpesifik = namaScriptInput[perangkat.serial] || "script.ahk";
 
       const respon = await fetch(`${URL_HTTP}/api/command`, {
         method: 'POST',
@@ -303,11 +304,11 @@ export default function App() {
         }),
       });
       if (respon.ok) {
-        tampilkanNotifikasi(`${teks.notifAhkSend} ${perangkat.name} ${scriptSpesifik ? `(${scriptSpesifik})` : ''}`);
+        tampilkanNotifikasi(`${teks.notifAhkSend} ${perangkat.name} -> ${scriptSpesifik}`);
         muatDataDariDatabase();
       }
     } catch (k) {
-      console.error('Execution signal failed', k);
+      console.error('Command propagation failure', k);
     }
   };
 
@@ -336,7 +337,7 @@ export default function App() {
         muatDataDariDatabase();
       }
     } catch (e) {
-      tampilkanNotifikasi('Database transaction failure');
+      tampilkanNotifikasi('Database synchronization error');
     }
   };
 
@@ -354,11 +355,9 @@ export default function App() {
       if (hapus.ok) {
         tampilkanNotifikasi(teks.notifDbDeleted);
         muatDataDariDatabase();
-      } else {
-        tampilkanNotifikasi('Sesi habis atau kunci tidak valid (403)');
       }
     } catch (g) {
-      tampilkanNotifikasi('Purge failure');
+      tampilkanNotifikasi('Delete database entry failed');
     }
   };
 
@@ -380,7 +379,7 @@ export default function App() {
         tampilkanNotifikasi(data.message || 'Access Refused');
       }
     } catch (error) {
-      tampilkanNotifikasi('Gagal terkoneksi ke server.');
+      tampilkanNotifikasi('Gagal terkoneksi ke server API backend.');
     }
   };
 
@@ -437,12 +436,25 @@ export default function App() {
   if (!sudahLogin) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute top-4 right-4 z-50">
-          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition">
-            <Languages className="w-3.5 h-3.5" /> {bahasa === 'ID' ? 'English' : 'Indonesia'}
+        {/* KEMBALIKAN UI SELEKTOR BAHASA VERSI LAMA: BENDERA NEGARA TEXT BERSIH */}
+        <div className="absolute top-4 right-4 z-50 flex gap-2">
+          <button 
+            onClick={() => setBahasa('ID')} 
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${bahasa === 'ID' ? 'bg-indigo-600 text-white shadow' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800'}`}
+          >
+            🇮🇩 ID
+          </button>
+          <button 
+            onClick={() => setBahasa('EN')} 
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${bahasa === 'EN' ? 'bg-indigo-600 text-white shadow' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800'}`}
+          >
+            🇺🇸 ENG
           </button>
         </div>
+
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_60%)]" />
+        
+        {/* FIX SEMPURNA: FORM SUBMIT WRAPPER MENGHILANGKAN WARNING CHROMIUM INTERNALS */}
         <form onSubmit={eksekusiLoginAPI} className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
           <div className="text-center space-y-2">
             <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner">
@@ -482,9 +494,12 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition">
-            <Languages className="w-3.5 h-3.5" /> {bahasa === 'ID' ? 'English' : 'Indonesia'}
-          </button>
+          {/* SELEKTOR BAHASA VERSI LAMA DI HEADER */}
+          <div className="bg-slate-950 border border-slate-800 p-1 rounded-xl flex gap-1">
+            <button onClick={() => setBahasa('ID')} className={`px-2 py-1 rounded-lg text-xs font-bold transition ${bahasa === 'ID' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'}`}>🇮🇩 ID</button>
+            <button onClick={() => setBahasa('EN')} className={`px-2 py-1 rounded-lg text-xs font-bold transition ${bahasa === 'EN' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'}`}>🇺🇸 ENG</button>
+          </div>
+
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold font-mono border ${wsTerhubung ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'}`}>
             <Radio className={`w-3.5 h-3.5 ${wsTerhubung ? 'animate-pulse' : ''}`} /> {wsTerhubung ? teks.statusWsActive : teks.statusWsClose}
           </div>
@@ -584,6 +599,7 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-3 w-full lg:w-auto justify-end relative">
+                  {/* TOMBOL KONTROL YANG LEBIH SENSITIF TERHADAP STATUS LIVE WEBSOCKET */}
                   <button disabled={!perangkat.isOnline} onClick={() => ubahStatusAhk(perangkat)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${!perangkat.isOnline ? 'bg-slate-950 border border-slate-800 text-slate-600 cursor-not-allowed' : perangkat.ahkEnabled ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' : 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'}`}>{!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}</button>
                   
                   <div className="relative">
