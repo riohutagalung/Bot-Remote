@@ -3,20 +3,17 @@ import react from '@vitejs/plugin-react';
 
 // Konfigurasi Vite utama
 export default defineConfig({
-  plugins: [react()],
-  server: {
-    host: '0.0.0.0',
-    port: 3000
-  },
   build: {
-    outDir: 'dist',
-    sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom']
-        }
-      }
-    }
-  }
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react')) return 'react-vendor';
+            if (id.includes('lucide-react')) return 'icons-vendor';
+            return 'vendor'; // sisa library lainnya
+          }
+        },
+      },
+    },
+  },
 });
