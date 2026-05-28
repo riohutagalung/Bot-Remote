@@ -211,9 +211,6 @@ export default function App() {
     setTimeout(() => setNotifikasi(null), 3000);
   };
 
-  // ====================================================================================
-  // LOGIKA MASTER MERGE: SINKRON STATUS AHK TERHADAP TRAY ICON LAPTOP TARGET (.info)
-  // ====================================================================================
   const masterDaftarPerangkat = useMemo(() => {
     const daftarHasilGabung = [];
     const petaOnline = new Map();
@@ -227,7 +224,6 @@ export default function App() {
     
     perangkatDatabase.forEach(perangkat => {
       if (!perangkat || !perangkat.serial) return;
-      const kunciSerial = perishable => perangkat.serial.trim().toLowerCase();
       const kunciSerialReal = perangkat.serial.trim().toLowerCase();
       serialTerprosesDariDb.add(kunciSerialReal);
 
@@ -237,11 +233,11 @@ export default function App() {
       daftarHasilGabung.push({
         ...perangkat,
         isOnline: statusAktif,
-        // Status AHK membaca payload telemetri murni dari client app windows (.info)
-        ahkEnabled: dataSinyalLive ? (dataSinyalLive.ahkEnabled || dataSinyalLive.info?.ahkEnabled || false) : false,
+        // PERBAIKAN: Membaca status ahk dari info atau root live secara akurat
+        ahkEnabled: dataSinyalLive ? (dataSinyalLive.info?.ahkEnabled || dataSinyalLive.ahkEnabled || false) : (perangkat.ahkEnabled || false),
         ip: dataSinyalLive?.info?.ip || dataSinyalLive?.ip || perangkat.ip || '-',
         mac: dataSinyalLive?.info?.mac || dataSinyalLive?.mac || perangkat.mac || '-',
-        wifi: dataSinyalLive?.info?.wifi || perishable => dataSinyalLive?.wifi || perangkat.wifi || '-',
+        wifi: dataSinyalLive?.info?.wifi || dataSinyalLive?.wifi || perangkat.wifi || '-',
         model: dataSinyalLive?.info?.model || dataSinyalLive?.model || perangkat.model || '-',
         name: perangkat.name || dataSinyalLive?.info?.hostname || dataSinyalLive?.hostname || 'Laptop Target',
         terbacaOtomatisBelumDisimpan: false
@@ -262,7 +258,7 @@ export default function App() {
           ip: live.info?.ip || live.ip || '-',
           mac: live.info?.mac || live.mac || '-',
           isOnline: true,
-          ahkEnabled: live.ahkEnabled || live.info?.ahkEnabled || false,
+          ahkEnabled: live.info?.ahkEnabled || live.ahkEnabled || false,
           terbacaOtomatisBelumDisimpan: true
         });
       }
@@ -279,9 +275,6 @@ export default function App() {
     return { total, online, offline, ahkAktif };
   }, [masterDaftarPerangkat]);
 
-  // ====================================================================================
-  // LOGIKA SINKRONISASI TOMBOL: LEPAS INTERVENSI BACKEND AGAR MURNI MENUNGGU RESPON CLIENT
-  // ====================================================================================
   const ubahStatusAhk = async (perangkat) => {
     try {
       const aksiPerintah = perangkat.ahkEnabled ? 'stop_ahk' : 'start_ahk';
@@ -486,7 +479,7 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition">
+          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition">
             <Languages className="w-3.5 h-3.5" />
             {bahasa === 'ID' ? 'English' : 'Indonesia'}
           </button>
@@ -536,48 +529,23 @@ export default function App() {
             <Plus className="w-4 h-4 text-indigo-500" /> {idSedangDiedit ? teks.formTitleEdit : teks.formTitleAdd}
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <input 
-              type="text" 
-              value={dataForm.name} 
-              onChange={(e) => setDataForm({...dataForm, name: e.target.value})} 
-              placeholder={teks.formPlaceName} 
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition" 
-            />
-            <input 
-              type="text" 
-              value={dataForm.serial} 
-              onChange={(e) => setDataForm({...dataForm, serial: e.target.value})} 
-              placeholder={teks.formPlaceSerial} 
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition" 
-            />
-            <input 
-              type="text" 
-              value={dataForm.model} 
-              onChange={(e) => setDataForm({...dataForm, model: e.target.value})} 
-              placeholder={teks.formPlaceModel} 
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition" 
-            />
-            <input 
-              type="text" 
-              value={dataForm.wifi} 
-              onChange={(e) => setDataForm({...dataForm, wifi: e.target.value})} 
-              placeholder={teks.formPlaceWifi} 
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition" 
-            />
-            <input 
-              type="text" 
-              value={dataForm.ip} 
-              onChange={(e) => setDataForm({...dataForm, ip: e.target.value})} 
-              placeholder={teks.formPlaceIp} 
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition" 
-            />
-            <input 
-              type="text" 
-              value={dataForm.mac} 
-              onChange={(e) => setDataForm({...dataForm, mac: e.target.value})} 
-              placeholder={teks.formPlaceMac} 
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition" 
-            />
+            {[
+              { label: teks.formPlaceName, key: 'name' },
+              { label: teks.formPlaceSerial, key: 'serial' },
+              { label: teks.formPlaceModel, key: 'model' },
+              { label: teks.formPlaceWifi, key: 'wifi' },
+              { label: teks.formPlaceIp, key: 'ip' },
+              { label: teks.formPlaceMac, key: 'mac' }
+            ].map((kolom) => (
+              <input 
+                key={kolom.key}
+                type="text" 
+                value={dataForm[kolom.key]} 
+                onChange={(e) => setDataForm({...dataForm, [kolom.key]: e.target.value})} 
+                placeholder={kolom.label} 
+                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition" 
+              />
+            ))}
           </div>
           <div className="flex gap-2">
             <button onClick={() => simpanKeDatabasePusat(null)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all">
