@@ -16,7 +16,9 @@ import {
   Activity,
   Save,
   Languages,
-  FileCode 
+  FileCode,
+  MoreVertical,
+  Edit2
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
@@ -60,6 +62,7 @@ const KAMUS_BAHASA = {
     btnControlOff: "AHK: MATI 🔴",
     btnControlOffline: "OFFLINE 📡",
     btnEdit: "Ubah",
+    btnDelete: "Hapus",
     notifWs: "Sistem telemetri aktif",
     notifAhkSend: "Sinyal kontrol dikirim ke",
     notifDbSaved: "Data terkunci ke server backend",
@@ -105,6 +108,7 @@ const KAMUS_BAHASA = {
     btnControlOff: "AHK: INACTIVE 🔴",
     btnControlOffline: "OFFLINE 📡",
     btnEdit: "Edit",
+    btnDelete: "Delete",
     notifWs: "Telemetry pipeline linked",
     notifAhkSend: "Control signal dispatched to",
     notifDbSaved: "Schema locked into cluster cloud",
@@ -132,6 +136,7 @@ export default function App() {
   const [notifikasi, setNotifikasi] = useState(null);
 
   const [namaScriptInput, setNamaScriptInput] = useState({});
+  const [menuTerbuka, setMenuTerbuka] = useState(null); // Mengontrol dropdown titik 3 per perangkat
 
   const [dataForm, setDataForm] = useState({
     name: '', serial: '', model: '', wifi: '', ip: '', mac: ''
@@ -140,7 +145,6 @@ export default function App() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    // Membaca token dari localStorage / sessionStorage secara konsisten
     const tokenOtorisasi = localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY);
     if (tokenOtorisasi) setSudahLogin(true);
     setCekSesiSelesai(true);
@@ -154,7 +158,7 @@ export default function App() {
         setPerangkatDatabase(Array.isArray(hasil) ? hasil : hasil.devices || []);
       }
     } catch (err) {
-      console.error("Database connection synchronization failure:", err);
+      console.error("Database sync failure:", err);
     }
   };
 
@@ -212,6 +216,7 @@ export default function App() {
     setTimeout(() => setNotifikasi(null), 3000);
   };
 
+  // LOGIKA UTAMA: Menggabungkan data DB dan Telemetri Realtime dari client.exe
   const masterDaftarPerangkat = useMemo(() => {
     const daftarHasilGabung = [];
     const petaOnline = new Map();
@@ -231,15 +236,20 @@ export default function App() {
       const dataSinyalLive = petaOnline.get(kunciSerial);
       const statusAktif = petaOnline.has(kunciSerial);
 
+      // Memastikan pembacaan status AHK dari client.exe akurat (baik dari root ataupun objek info)
+      const isAhkRunning = dataSinyalLive 
+        ? (dataSinyalLive.ahkEnabled === true || dataSinyalLive.info?.ahkEnabled === true || dataSinyalLive.isAhkRunning === true) 
+        : (perangkat.ahkEnabled === true);
+
       daftarHasilGabung.push({
         ...perangkat,
         isOnline: statusAktif,
-        ahkEnabled: dataSinyalLive ? (dataSinyalLive.ahkEnabled || false) : (perangkat.ahkEnabled || false),
-        ip: dataSinyalLive?.info?.ip || perangkat.ip || '-',
-        mac: dataSinyalLive?.info?.mac || perangkat.mac || '-',
-        wifi: dataSinyalLive?.info?.wifi || perangkat.wifi || '-',
-        model: dataSinyalLive?.info?.model || perangkat.model || '-',
-        name: perangkat.name || dataSinyalLive?.info?.hostname || 'Laptop Target',
+        ahkEnabled: isAhkRunning,
+        ip: dataSinyalLive?.info?.ip || dataSinyalLive?.ip || perangkat.ip || '-',
+        mac: dataSinyalLive?.info?.mac || dataSinyalLive?.mac || perangkat.mac || '-',
+        wifi: dataSinyalLive?.info?.wifi || dataSinyalLive?.wifi || perangkat.wifi || '-',
+        model: dataSinyalLive?.info?.model || dataSinyalLive?.model || perangkat.model || '-',
+        name: perangkat.name || dataSinyalLive?.info?.hostname || dataSinyalLive?.hostname || 'Laptop Target',
         terbacaOtomatisBelumDisimpan: false
       });
     });
@@ -249,16 +259,18 @@ export default function App() {
       const kunciLiveSerial = live.id.trim().toLowerCase();
 
       if (!serialTerprosesDariDb.has(kunciLiveSerial)) {
+        const isAhkLiveOnlyRunning = live.ahkEnabled === true || live.info?.ahkEnabled === true || live.isAhkRunning === true;
+        
         daftarHasilGabung.push({
           id: `auto-${live.id}`,
-          name: live.info?.hostname || 'New Client Node',
+          name: live.info?.hostname || live.hostname || 'New Client Node',
           serial: live.id.trim(),
-          model: live.info?.model || 'Windows Client',
-          wifi: live.info?.wifi || '-',
-          ip: live.info?.ip || '-',
-          mac: live.info?.mac || '-',
+          model: live.info?.model || live.model || 'Windows Client',
+          wifi: live.info?.wifi || live.wifi || '-',
+          ip: live.info?.ip || live.ip || '-',
+          mac: live.info?.mac || live.mac || '-',
           isOnline: true,
-          ahkEnabled: live.ahkEnabled || false,
+          ahkEnabled: isAhkLiveOnlyRunning,
           terbacaOtomatisBelumDisimpan: true
         });
       }
@@ -418,6 +430,13 @@ export default function App() {
     Object.values(p).join(' ').toLowerCase().includes(kataKunciCari.toLowerCase())
   );
 
+  // Menutup menu dropdown saat klik di luar area
+  useEffect(() => {
+    const klikLuar = () => setMenuTerbuka(null);
+    window.addEventListener('click', klikLuar);
+    return () => window.removeEventListener('click', klikLuar);
+  }, []);
+
   if (!cekSesiSelesai) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-300 gap-4 font-mono">
@@ -479,7 +498,7 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition">
+          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition">
             <Languages className="w-3.5 h-3.5" />
             {bahasa === 'ID' ? 'English' : 'Indonesia'}
           </button>
@@ -499,6 +518,7 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        {/* Panel Statistik */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl relative overflow-hidden">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{teks.statDb}</p>
@@ -524,6 +544,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* Form Pendaftaran / Edit */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
           <h2 className="text-xs font-black uppercase text-slate-300 tracking-widest flex items-center gap-2">
             <Plus className="w-4 h-4 text-indigo-500" /> {idSedangDiedit ? teks.formTitleEdit : teks.formTitleAdd}
@@ -557,6 +578,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* Filter Cari & Ekspor Impor */}
         <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative w-full md:flex-1">
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
@@ -579,6 +601,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* List Perangkat */}
         <div className="space-y-3">
           {daftarHasilPencarian.length === 0 ? (
             <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl text-center py-12 text-slate-500 text-xs font-mono">
@@ -589,7 +612,7 @@ export default function App() {
             daftarHasilPencarian.map((perangkat) => (
               <div 
                 key={perangkat.serial} 
-                className={`bg-slate-900 border rounded-2xl p-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 transition-all ${
+                className={`bg-slate-900 border rounded-2xl p-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 transition-all relative ${
                   perangkat.terbacaOtomatisBelumDisimpan 
                     ? 'border-cyan-500 bg-gradient-to-r from-cyan-950/20 to-transparent' 
                     : 'border-slate-800/80'
@@ -630,7 +653,8 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
+                {/* Kontrol Utama AHK & Titik Tiga Dropdown */}
+                <div className="flex items-center gap-3 w-full lg:w-auto justify-end relative">
                   <button 
                     onClick={() => ubahStatusAhk(perangkat)}
                     disabled={!perangkat.isOnline}
@@ -645,32 +669,56 @@ export default function App() {
                     {!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}
                   </button>
 
-                  <button 
-                    onClick={() => {
-                      setIdSedangDiedit(perangkat.serial);
-                      setDataForm({
-                        name: perangkat.name,
-                        serial: perangkat.serial,
-                        model: perangkat.model,
-                        wifi: perangkat.wifi,
-                        ip: perangkat.ip,
-                        mac: perangkat.mac
-                      });
-                    }}
-                    className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-700 transition"
-                  >
-                    {teks.btnEdit}
-                  </button>
+                  {/* Tombol Titik Tiga Dropdown */}
+                  <div className="relative">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation(); // Mencegah penutupan instan window-click
+                        setMenuTerbuka(menuTerbuka === perangkat.serial ? null : perangkat.serial);
+                      }}
+                      className="p-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
 
-                  <button 
-                    onClick={() => hapusPerangkatPermanen(perangkat.serial)}
-                    className="p-2 bg-slate-800 border border-slate-700 rounded-xl text-rose-400 hover:bg-rose-950 hover:border-rose-900 transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    {/* Konten Dropdown (Ubah & Hapus Kembali Bersembunyi di Sini) */}
+                    {menuTerbuka === perangkat.serial && (
+                      <div className="absolute right-0 mt-2 w-36 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden font-sans py-1 animate-in fade-in duration-150">
+                        <button 
+                          onClick={() => {
+                            setIdSedangDiedit(perangkat.serial);
+                            setDataForm({
+                              name: perangkat.name,
+                              serial: perangkat.serial,
+                              model: perangkat.model,
+                              wifi: perangkat.wifi,
+                              ip: perangkat.ip,
+                              mac: perangkat.mac
+                            });
+                            setMenuTerbuka(null);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white text-left transition"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-indigo-400" />
+                          {teks.btnEdit}
+                        </button>
+                        
+                        <button 
+                          onClick={() => {
+                            hapusPerangkatPermanen(perangkat.serial);
+                            setMenuTerbuka(null);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 text-left transition border-t border-slate-800/60"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          {teks.btnDelete}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            )
+            ))
           )}
         </div>
       </main>
