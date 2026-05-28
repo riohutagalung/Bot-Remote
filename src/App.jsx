@@ -136,7 +136,7 @@ export default function App() {
   const [notifikasi, setNotifikasi] = useState(null);
 
   const [namaScriptInput, setNamaScriptInput] = useState({});
-  const [menuTerbuka, setMenuTerbuka] = useState(null); // Mengontrol dropdown titik 3 per perangkat
+  const [menuTerbuka, setMenuTerbuka] = useState(null); // State kontrol dropdown menu titik 3
 
   const [dataForm, setDataForm] = useState({
     name: '', serial: '', model: '', wifi: '', ip: '', mac: ''
@@ -158,7 +158,7 @@ export default function App() {
         setPerangkatDatabase(Array.isArray(hasil) ? hasil : hasil.devices || []);
       }
     } catch (err) {
-      console.error("Database sync failure:", err);
+      console.error("Database connection synchronization failure:", err);
     }
   };
 
@@ -216,7 +216,13 @@ export default function App() {
     setTimeout(() => setNotifikasi(null), 3000);
   };
 
-  // LOGIKA UTAMA: Menggabungkan data DB dan Telemetri Realtime dari client.exe
+  // Tutup menu dropdown otomatis saat klik di luar area komponen list
+  useEffect(() => {
+    const klikLuarMenu = () => setMenuTerbuka(null);
+    window.addEventListener('click', klikLuarMenu);
+    return () => window.removeEventListener('click', klikLuarMenu);
+  }, []);
+
   const masterDaftarPerangkat = useMemo(() => {
     const daftarHasilGabung = [];
     const petaOnline = new Map();
@@ -236,9 +242,9 @@ export default function App() {
       const dataSinyalLive = petaOnline.get(kunciSerial);
       const statusAktif = petaOnline.has(kunciSerial);
 
-      // Memastikan pembacaan status AHK dari client.exe akurat (baik dari root ataupun objek info)
+      // Logika Fleksibel: Deteksi status AHK dari client.exe baik root property maupun dari child object `.info`
       const isAhkRunning = dataSinyalLive 
-        ? (dataSinyalLive.ahkEnabled === true || dataSinyalLive.info?.ahkEnabled === true || dataSinyalLive.isAhkRunning === true) 
+        ? (dataSinyalLive.ahkEnabled === true || dataSinyalLive.isAhkRunning === true || dataSinyalLive.info?.ahkEnabled === true)
         : (perangkat.ahkEnabled === true);
 
       daftarHasilGabung.push({
@@ -259,7 +265,7 @@ export default function App() {
       const kunciLiveSerial = live.id.trim().toLowerCase();
 
       if (!serialTerprosesDariDb.has(kunciLiveSerial)) {
-        const isAhkLiveOnlyRunning = live.ahkEnabled === true || live.info?.ahkEnabled === true || live.isAhkRunning === true;
+        const isAhkLiveOnlyRunning = live.ahkEnabled === true || live.isAhkRunning === true || live.info?.ahkEnabled === true;
         
         daftarHasilGabung.push({
           id: `auto-${live.id}`,
@@ -350,11 +356,12 @@ export default function App() {
     try {
       const tokenSesi = localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY) || "rh-secure-token-session-key-2026";
 
+      const sampleAuthHeader = `Bearer ${tokenSesi}`;
       const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, { 
         method: 'DELETE',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokenSesi}`
+          'Authorization': sampleAuthHeader
         }
       });
       if (hapus.ok) {
@@ -430,13 +437,6 @@ export default function App() {
     Object.values(p).join(' ').toLowerCase().includes(kataKunciCari.toLowerCase())
   );
 
-  // Menutup menu dropdown saat klik di luar area
-  useEffect(() => {
-    const klikLuar = () => setMenuTerbuka(null);
-    window.addEventListener('click', klikLuar);
-    return () => window.removeEventListener('click', klikLuar);
-  }, []);
-
   if (!cekSesiSelesai) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-300 gap-4 font-mono">
@@ -498,7 +498,7 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition">
+          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition">
             <Languages className="w-3.5 h-3.5" />
             {bahasa === 'ID' ? 'English' : 'Indonesia'}
           </button>
@@ -518,7 +518,6 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        {/* Panel Statistik */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl relative overflow-hidden">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{teks.statDb}</p>
@@ -544,7 +543,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Form Pendaftaran / Edit */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
           <h2 className="text-xs font-black uppercase text-slate-300 tracking-widest flex items-center gap-2">
             <Plus className="w-4 h-4 text-indigo-500" /> {idSedangDiedit ? teks.formTitleEdit : teks.formTitleAdd}
@@ -578,7 +576,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Filter Cari & Ekspor Impor */}
         <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative w-full md:flex-1">
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
@@ -601,7 +598,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* List Perangkat */}
         <div className="space-y-3">
           {daftarHasilPencarian.length === 0 ? (
             <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl text-center py-12 text-slate-500 text-xs font-mono">
@@ -653,7 +649,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Kontrol Utama AHK & Titik Tiga Dropdown */}
+                {/* Kontrol Utama AHK & Menu Dropdown Titik 3 */}
                 <div className="flex items-center gap-3 w-full lg:w-auto justify-end relative">
                   <button 
                     onClick={() => ubahStatusAhk(perangkat)}
@@ -669,11 +665,11 @@ export default function App() {
                     {!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}
                   </button>
 
-                  {/* Tombol Titik Tiga Dropdown */}
+                  {/* Tombol Pembuka Dropdown Titik 3 */}
                   <div className="relative">
                     <button 
                       onClick={(e) => {
-                        e.stopPropagation(); // Mencegah penutupan instan window-click
+                        e.stopPropagation(); // Stop bubble agar event window.onclick tidak langsung memicu penutupan
                         setMenuTerbuka(menuTerbuka === perangkat.serial ? null : perangkat.serial);
                       }}
                       className="p-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition"
@@ -681,7 +677,7 @@ export default function App() {
                       <MoreVertical className="w-4 h-4" />
                     </button>
 
-                    {/* Konten Dropdown (Ubah & Hapus Kembali Bersembunyi di Sini) */}
+                    {/* Tampilan Dropdown: Menyembunyikan Fitur Ubah & Hapus */}
                     {menuTerbuka === perangkat.serial && (
                       <div className="absolute right-0 mt-2 w-36 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden font-sans py-1 animate-in fade-in duration-150">
                         <button 
