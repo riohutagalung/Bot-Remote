@@ -14,7 +14,9 @@ import {
   CheckCircle,
   XCircle,
   Activity,
-  Languages 
+  Save,
+  Languages,
+  FileCode 
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
@@ -138,6 +140,7 @@ export default function App() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
+    // Membaca token dari localStorage / sessionStorage secara konsisten
     const tokenOtorisasi = localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY);
     if (tokenOtorisasi) setSudahLogin(true);
     setCekSesiSelesai(true);
@@ -222,26 +225,21 @@ export default function App() {
     
     perangkatDatabase.forEach(perangkat => {
       if (!perangkat || !perangkat.serial) return;
-      const kunciSerialReal = perangkat.serial.trim().toLowerCase();
-      serialTerprosesDariDb.add(kunciSerialReal);
+      const kunciSerial = perangkat.serial.trim().toLowerCase();
+      serialTerprosesDariDb.add(kunciSerial);
 
-      const dataSinyalLive = petaOnline.get(kunciSerialReal);
-      const statusAktif = petaOnline.has(kunciSerialReal);
-
-      // Agresif mengecek status AHK dari payload live root atau objek .info internal
-      const isAhkTargetRunning = dataSinyalLive 
-        ? (dataSinyalLive.info?.ahkEnabled === true || dataSinyalLive.ahkEnabled === true) 
-        : false;
+      const dataSinyalLive = petaOnline.get(kunciSerial);
+      const statusAktif = petaOnline.has(kunciSerial);
 
       daftarHasilGabung.push({
         ...perangkat,
         isOnline: statusAktif,
-        ahkEnabled: isAhkTargetRunning,
-        ip: dataSinyalLive?.info?.ip || dataSinyalLive?.ip || perangkat.ip || '-',
-        mac: dataSinyalLive?.info?.mac || dataSinyalLive?.mac || perangkat.mac || '-',
-        wifi: dataSinyalLive?.info?.wifi || dataSinyalLive?.wifi || perangkat.wifi || '-',
-        model: dataSinyalLive?.info?.model || dataSinyalLive?.model || perangkat.model || '-',
-        name: perangkat.name || dataSinyalLive?.info?.hostname || dataSinyalLive?.hostname || 'Laptop Target',
+        ahkEnabled: dataSinyalLive ? (dataSinyalLive.ahkEnabled || false) : (perangkat.ahkEnabled || false),
+        ip: dataSinyalLive?.info?.ip || perangkat.ip || '-',
+        mac: dataSinyalLive?.info?.mac || perangkat.mac || '-',
+        wifi: dataSinyalLive?.info?.wifi || perangkat.wifi || '-',
+        model: dataSinyalLive?.info?.model || perangkat.model || '-',
+        name: perangkat.name || dataSinyalLive?.info?.hostname || 'Laptop Target',
         terbacaOtomatisBelumDisimpan: false
       });
     });
@@ -251,18 +249,16 @@ export default function App() {
       const kunciLiveSerial = live.id.trim().toLowerCase();
 
       if (!serialTerprosesDariDb.has(kunciLiveSerial)) {
-        const isAhkLiveOnlyRunning = live.info?.ahkEnabled === true || live.ahkEnabled === true;
-        
         daftarHasilGabung.push({
           id: `auto-${live.id}`,
-          name: live.info?.hostname || live.hostname || 'New Client Node',
+          name: live.info?.hostname || 'New Client Node',
           serial: live.id.trim(),
-          model: live.info?.model || live.model || 'Windows Client',
-          wifi: live.info?.wifi || live.wifi || '-',
-          ip: live.info?.ip || live.ip || '-',
-          mac: live.info?.mac || live.mac || '-',
+          model: live.info?.model || 'Windows Client',
+          wifi: live.info?.wifi || '-',
+          ip: live.info?.ip || '-',
+          mac: live.info?.mac || '-',
           isOnline: true,
-          ahkEnabled: isAhkLiveOnlyRunning,
+          ahkEnabled: live.ahkEnabled || false,
           terbacaOtomatisBelumDisimpan: true
         });
       }
@@ -483,7 +479,7 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition">
+          <button onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition">
             <Languages className="w-3.5 h-3.5" />
             {bahasa === 'ID' ? 'English' : 'Indonesia'}
           </button>
@@ -674,7 +670,7 @@ export default function App() {
                   </button>
                 </div>
               </div>
-            ))
+            )
           )}
         </div>
       </main>
