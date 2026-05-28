@@ -1,4 +1,4 @@
-// RH Remote Client - Simple AHK Controller
+// RH Remote Client - Simple AHK Controller (Final)
 const WebSocket = require("ws");
 const { exec, execSync } = require("child_process");
 const os = require("os");
@@ -50,7 +50,8 @@ function getIP() {
 function getMAC() {
   const n = os.networkInterfaces();
   for (const i of Object.keys(n)) {
-    for (const f of n[i]) if (f.mac && f.mac !== "00:00:00:00:00:00") return f.mac;
+    for (const f of n[i])
+      if (f.mac && f.mac !== "00:00:00:00:00:00") return f.mac;
   }
   return "-";
 }
@@ -70,12 +71,18 @@ function jalankanAHK() {
     console.error("Gagal menjalankan AHK:", e.message);
   }
 }
+
 function matikanAHK() {
   console.log("[KILL] Menutup semua AutoHotkey.exe ...");
-  exec(`taskkill /F /IM AutoHotkey.exe >nul 2>nul`, () => {
-    setTimeout(periksaStatus, 1500);
-  });
+  // Tambahkan semua varian nama proses agar benar-benar mati
+  exec(
+    `taskkill /F /IM AutoHotkey.exe >nul 2>nul & taskkill /F /IM AutoHotkeyU64.exe >nul 2>nul & taskkill /F /IM AutoHotkeyU32.exe >nul 2>nul`,
+    () => {
+      setTimeout(periksaStatus, 1500);
+    }
+  );
 }
+
 function periksaStatus() {
   exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, out) => {
     const aktif = !err && out.toLowerCase().includes("autohotkey.exe");
@@ -85,6 +92,7 @@ function periksaStatus() {
     }
   });
 }
+
 function kirimTelemetri() {
   if (!wsGlobal || wsGlobal.readyState !== WebSocket.OPEN) return;
   const info = getSystemInfo();
@@ -109,6 +117,19 @@ function connect() {
 
   ws.on("open", () => {
     console.log("✔ Connected to server");
+
+    // 🔹 Kirim identitas awal supaya server & dashboard mengenali client
+    const info = getSystemInfo();
+    ws.send(JSON.stringify({
+      id: info.serial.replace(/[^\w-]/g, "_"),
+      hostname: info.hostname,
+      model: `${info.platform} (${info.arch})`,
+      wifi: info.wifi,
+      ip: info.ip,
+      mac: info.mac,
+      ahkEnabled: statusAhkSaatIni
+    }));
+
     periksaStatus();
     setInterval(periksaStatus, 3000);
   });
@@ -120,7 +141,9 @@ function connect() {
         if (data.action === "start_ahk") jalankanAHK();
         if (data.action === "stop_ahk") matikanAHK();
       }
-    } catch (e) { console.error("Parse error:", e.message); }
+    } catch (e) {
+      console.error("Parse error:", e.message);
+    }
   });
 
   ws.on("close", () => {
@@ -131,5 +154,5 @@ function connect() {
   ws.on("error", () => {});
 }
 
-console.log("Starting RH Remote Client (Simple Control)...");
+console.log("Starting RH Remote Client (Simple Control - Final)...");
 connect();
