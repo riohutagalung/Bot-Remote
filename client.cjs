@@ -2,10 +2,9 @@ const WebSocket = require("ws");
 const { exec, execSync } = require("child_process");
 const os = require("os");
 const path = require("path");
-const fs = require("fs"); // Menambahkan File System bawaan
+const fs = require("fs");
 
 const SERVER_URL = "wss://bot-remote-production.up.railway.app";
-// Ambil folder tempat client.exe dijalankan secara dinamis
 const CURRENT_DIR = process.pkg ? path.dirname(process.execPath) : __dirname;
 
 function getSystemInfo() {
@@ -29,7 +28,9 @@ function getSerialNumber() {
       return match && match[1] && match[1] !== "To" ? match[1] : "UNKNOWN_SERIAL";
     }
     return "NON_WINDOWS_DEV";
-  } catch { return "UNKNOWN_SERIAL"; }
+  } catch {
+    return "UNKNOWN_SERIAL";
+  }
 }
 
 function getWifiSSID() {
@@ -40,7 +41,9 @@ function getWifiSSID() {
       return match ? match[1].trim() : "-";
     }
     return "-";
-  } catch { return "-"; }
+  } catch {
+    return "-";
+  }
 }
 
 function getLocalIP() {
@@ -77,32 +80,35 @@ function kendalikanAhkBalikLayar(aksi, namaScriptKustom = "") {
     if (aksi === "start") {
       let fileTarget = namaScriptKustom;
 
-      // Jika web tidak mengirim nama script spesifik, cari file .ahk pertama di folder
+      // Jika web tidak mengirim nama script spesifik, cari file .ahk pertama
       if (!fileTarget) {
         try {
           const files = fs.readdirSync(CURRENT_DIR);
           const ahkFiles = files.filter(f => f.toLowerCase().endsWith(".ahk"));
-          if (ahkFiles.length > 0) {
-            fileTarget = ahkFiles[0]; // Ambil file AHK pertama yang ditemukan
-          }
-        } catch (e) { console.error("Gagal membaca folder script:", e.message); }
+          if (ahkFiles.length > 0) fileTarget = ahkFiles[0];
+        } catch (e) {
+          console.error("Gagal membaca folder script:", e.message);
+        }
       }
 
       if (fileTarget) {
         const fullScriptPath = path.join(CURRENT_DIR, fileTarget);
-        
-        // =======================================================================
-        // PERBAIKAN DI SINI: Memanggil AutoHotkey.exe secara absolut agar Windows
-        // tidak tersesat mencari path file saat aplikasi berjalan di mode Startup.
-        // =======================================================================
-        cmd = start "" "AutoHotkey.exe" "${fullScriptPath}";
-        console.log([Dynamic Exec] Menjalankan script via engine: ${fullScriptPath});
+
+        // ✅ PERBAIKAN: string literal valid
+        cmd = `start "" "AutoHotkey.exe" "${fullScriptPath}"`;
+        console.log(`[Dynamic Exec] Menjalankan script via engine: ${fullScriptPath}`);
       } else {
         console.log("[Alert] Tidak ada file .ahk ditemukan di folder ini!");
         return resolve();
       }
     } else if (aksi === "stop") {
-      cmd = taskkill /f /im AutoHotkey.exe || exit 0;
+      // Matikan semua kemungkinan proses AutoHotkey
+      cmd = [
+        `taskkill /f /im AutoHotkey.exe >nul 2>nul`,
+        `taskkill /f /im AutoHotkeyU64.exe >nul 2>nul`,
+        `taskkill /f /im AutoHotkeyU32.exe >nul 2>nul`
+      ].join(" & ");
+      console.log("[Dynamic Exec] Menonaktifkan semua AutoHotkey process");
     }
 
     exec(cmd, () => {
@@ -116,13 +122,10 @@ function kendalikanAhkBalikLayar(aksi, namaScriptKustom = "") {
 
 function periksaStatusAktifWindows() {
   if (os.platform() !== "win32") return;
-
   exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, stdout) => {
     let sedangJalan = false;
-    if (!err && stdout.toLowerCase().includes("autohotkey.exe")) {
-      sedangJalan = true;
-    }
-    
+    if (!err && stdout.toLowerCase().includes("autohotkey.exe")) sedangJalan = true;
+
     if (statusAhkSaatIni !== sedangJalan) {
       statusAhkSaatIni = sedangJalan;
       paksaKirimTelemetri();
@@ -139,7 +142,7 @@ function paksaKirimTelemetri() {
       id: cleanId,
       ahkEnabled: statusAhkSaatIni,
       hostname: info.hostname,
-      model: ${info.platform} (${info.arch}),
+      model: `${info.platform} (${info.arch})`,
       wifi: info.wifi,
       ip: info.ip,
       mac: info.mac
@@ -157,7 +160,7 @@ function connectToServer() {
   ws.on("open", () => {
     console.log("✔ Connected to remote server safely");
     periksaStatusAktifWindows();
-    intervalPingTelemetri = setInterval(paksaKirimTelemetri, 10000); 
+    intervalPingTelemetri = setInterval(paksaKirimTelemetri, 10000);
     intervalCekTasklist = setInterval(periksaStatusAktifWindows, 3000);
   });
 
@@ -165,24 +168,26 @@ function connectToServer() {
     try {
       const data = JSON.parse(message.toString());
       if (data && data.type === "execute_command" && data.action) {
-        // Mendukung penembakan nama script spesifik dari Web jika ada data.scriptName
         if (data.action === "start_ahk") {
           kendalikanAhkBalikLayar("start", data.scriptName || "");
         } else if (data.action === "stop_ahk") {
           kendalikanAhkBalikLayar("stop");
         }
       }
-    } catch (err) { console.error(err.message); }
+    } catch (err) {
+      console.error(err.message);
+    }
   });
 
   ws.on("close", () => {
     clearInterval(intervalPingTelemetri);
     clearInterval(intervalCekTasklist);
+    console.log("⚠ Connection closed, retrying...");
     setTimeout(connectToServer, 5000);
   });
 
   ws.on("error", () => {});
 }
 
-console.log("Starting remote client (Modular Dynamic Edition)...");
+console.log("Starting remote client (Modular Dynamic Edition)…");
 connectToServer();
