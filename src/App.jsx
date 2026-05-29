@@ -490,24 +490,24 @@ export default function App() {
              text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
 >
   {bahasa === "ID" ? (
-    <>
-      <img 
-        src="https://flagcdn.com/w40/id.png" 
-        alt="Indonesia" 
-        className="w-5 h-3.5 object-cover rounded-sm shadow-sm inline-block mr-1" 
-      />
-      <span>ID</span>
-    </>
-  ) : (
-    <>
-      <img 
-        src="https://flagcdn.com/w40/us.png" 
-        alt="English" 
-        className="w-5 h-3.5 object-cover rounded-sm shadow-sm inline-block mr-1" 
-      />
-      <span>ENG</span>
-    </>
-  )}
+  <>
+    <img
+      src="https://flagcdn.com/id.svg"
+      alt="Indonesia"
+      className="w-5 h-3.5 object-cover rounded-sm shadow-sm inline-block mr-1"
+    />
+    <span>ID</span>
+  </>
+) : (
+  <>
+    <img
+      src="https://flagcdn.com/us.svg"
+      alt="English"
+      className="w-5 h-3.5 object-cover rounded-sm shadow-sm inline-block mr-1"
+    />
+    <span>ENG</span>
+  </>
+)}
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_60%)]" />
         <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
