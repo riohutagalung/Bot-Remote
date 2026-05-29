@@ -30,7 +30,7 @@ const KAMUS_BAHASA = {
     authSub: "Masukkan kunci akses untuk masuk",
     authPlace: "Kata Sandi",
     authBtn: "Masuk Dashboard",
-    subTitle: "Kontrol semuanya dalam satu dashboard! Sor kaleeeeee kan?",
+    subTitle: "Manajemen Jaringan Laptop Target & Kontrol Engine",
     statusWsActive: "KONEKSI AKTIF",
     statusWsClose: "TERPUTUS",
     logout: "Keluar",
@@ -72,8 +72,8 @@ const KAMUS_BAHASA = {
     modalDangerTitle: "⚠️ TINDAKAN BERBAHAYA",
     modalCancel: "Batal",
     modalContinue: "Lanjutkan",
-    confirmDelete1: "Hapus permanen data laptop ini dari database pusat?",
-    confirmDelete2: "Yakin Ko? kehapus nanti permanen dari cloud backend!"
+    confirmDelete1: "Hapus permanen laptop ini dari database pusat?",
+    confirmDelete2: "APAKAH KAU BETUL-BETUL YAKIN? Tindakan ini akan menghapus data secara permanen dari cloud backend!"
   },
   EN: {
     loading: "BOOTING MASTER SYSTEM...",
@@ -486,28 +486,30 @@ export default function App() {
 <button
   onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
   className="flex items-center gap-1.5 px-3 py-1.5
-             bg-slate-800 hover:bg-slate-700 border border-slate-700
-             text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
+             bg-slate-900 border border-slate-800 rounded-xl
+             text-xs font-bold text-indigo-400 hover:bg-slate-800
+             transition shadow-md"
 >
   {bahasa === "ID" ? (
-  <>
-    <img
-      src="https://flagcdn.com/id.svg"
-      alt="Indonesia"
-      className="w-5 h-3.5 object-cover rounded-sm shadow-sm inline-block mr-1"
-    />
-    <span>ID</span>
-  </>
-) : (
-  <>
-    <img
-      src="https://flagcdn.com/us.svg"
-      alt="English"
-      className="w-5 h-3.5 object-cover rounded-sm shadow-sm inline-block mr-1"
-    />
-    <span>ENG</span>
-  </>
-)}
+    <>
+      <img
+        src="https://flagcdn.com/id.svg"
+        alt="Indonesia"
+        className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+      />
+      <span className="uppercase">ID</span>
+    </>
+  ) : (
+    <>
+      <img
+        src="https://flagcdn.com/us.svg"
+        alt="English"
+        className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+      />
+      <span className="uppercase">ENG</span>
+    </>
+  )}
+</button>
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_60%)]" />
         <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
@@ -562,13 +564,21 @@ export default function App() {
 >
   {bahasa === "ID" ? (
     <>
-      <span className="text-base">🇮🇩</span>
-      <span>ID</span>
+      <img
+        src="https://flagcdn.com/id.svg"
+        alt="Indonesia"
+        className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+      />
+      <span className="uppercase">ID</span>
     </>
   ) : (
     <>
-      <span className="text-base">🇺🇸</span>
-      <span>ENG</span>
+      <img
+        src="https://flagcdn.com/us.svg"
+        alt="English"
+        className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+      />
+      <span className="uppercase">ENG</span>
     </>
   )}
 </button>
