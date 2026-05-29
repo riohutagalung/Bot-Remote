@@ -7,10 +7,13 @@ import {
   Search,
   Laptop,
   Plus,
+  Sliders,
+  ShieldCheck,
   Radio,
   CheckCircle,
   XCircle,
   Activity,
+  Languages,
   MoreVertical,
   Save,
   Edit2
@@ -163,6 +166,7 @@ const KAMUS_BAHASA = {
 };
 
 export default function App() {
+  // Mengunci default bahasa ke English (EN)
   const [bahasa, setBahasa] = useState('EN');
   const teks = KAMUS_BAHASA[bahasa];
 
@@ -180,6 +184,7 @@ export default function App() {
   const [namaScriptInput, setNamaScriptInput] = useState({});
   const [activeDropdown, setActiveDropdown] = useState(null);
 
+  // State untuk kontrol Custom Modal Bertema khusus
   const [modalConfig, setModalConfig] = useState({
     isOpen: false,
     title: '',
@@ -200,6 +205,7 @@ export default function App() {
     setCekSesiSelesai(true);
   }, []);
 
+  // Menutup dropdown menu jika klik di luar area komponen
   useEffect(() => {
     const closeAllDropdowns = () => setActiveDropdown(null);
     window.addEventListener('click', closeAllDropdowns);
@@ -272,6 +278,7 @@ export default function App() {
     setTimeout(() => setNotifikasi(null), 3000);
   };
 
+  // Helper Custom Pop-up Modal Bertema Pengganti window.confirm bawaan browser
   const triggerCustomConfirm = (title, message, isDanger, onConfirmBlock) => {
     setModalConfig({
       isOpen: true,
@@ -409,8 +416,11 @@ export default function App() {
     }
   };
 
+  // Mekanisme Double Confirmation Menggunakan Custom Theme Pop-up Modal 
   const hapusPerangkatPermanen = (serialTarget) => {
+    // Konfirmasi Tingkat Pertama (Custom Modal UI)
     triggerCustomConfirm(teks.modalConfirmTitle, teks.confirmDelete1, false, () => {
+      // Konfirmasi Tingkat Kedua (Custom Modal UI - Alur Bahaya)
       setTimeout(() => {
         triggerCustomConfirm(teks.modalDangerTitle, teks.confirmDelete2, true, async () => {
           try {
@@ -506,24 +516,36 @@ export default function App() {
   }
 
   // ====================================================================
-  // 1. COMPONENT TAMPILAN HALAMAN LOGIN (SUDAH DI-FIX TOTAL STRUKTURNYA)
+  // COMPONENT TAMPILAN HALAMAN LOGIN (SUDAH DI-FIX TOTAL STRUKTURNYA)
   // ====================================================================
   if (!sudahLogin) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute top-4 right-4 z-50">
+          {/* Tombol Bendera Minimalis di Halaman Login */}
           <button
             onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-indigo-400 hover:bg-slate-800 transition shadow-md"
+            className="flex items-center gap-1.5 px-3 py-1.5
+             bg-slate-900 border border-slate-800 rounded-xl
+             text-xs font-bold text-indigo-400 hover:bg-slate-800
+             transition shadow-md"
           >
             {bahasa === "ID" ? (
               <>
-                <img src="https://flagcdn.com/id.svg" alt="Indonesia" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
+                <img
+                  src="https://flagcdn.com/id.svg"
+                  alt="Indonesia"
+                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+                />
                 <span className="uppercase">ID</span>
               </>
             ) : (
               <>
-                <img src="https://flagcdn.com/us.svg" alt="English" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
+                <img
+                  src="https://flagcdn.com/us.svg"
+                  alt="English"
+                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+                />
                 <span className="uppercase">ENG</span>
               </>
             )}
@@ -567,13 +589,13 @@ export default function App() {
   }
 
   // ====================================================================
-  // 2. COMPONENT UTAMA HALAMAN DASHBOARD (FIXED BRACKET & NEW LOGO HEADER)
+  // COMPONENT UTAMA HALAMAN DASHBOARD
   // ====================================================================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
       <header className="bg-slate-900/80 border-b border-slate-800/80 sticky top-0 backdrop-blur-md z-40 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
-          {/* Logo Baru di Bagian Header Dashboard */}
+          {/* Logo Baru di Header Dashboard */}
           <div className="w-10 h-10 bg-slate-950 rounded-xl flex items-center justify-center border border-slate-800 p-1.5 shadow-md">
             <LogoRH className="w-full h-full" />
           </div>
@@ -586,18 +608,29 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap justify-end">
+          {/* Tombol Bendera Minimalis di Header Dashboard */}
           <button
             onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5
+             bg-slate-800 hover:bg-slate-700 border border-slate-700
+             text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
           >
             {bahasa === "ID" ? (
               <>
-                <img src="https://flagcdn.com/id.svg" alt="Indonesia" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
+                <img
+                  src="https://flagcdn.com/id.svg"
+                  alt="Indonesia"
+                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+                />
                 <span className="uppercase">ID</span>
               </>
             ) : (
               <>
-                <img src="https://flagcdn.com/us.svg" alt="English" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
+                <img
+                  src="https://flagcdn.com/us.svg"
+                  alt="English"
+                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+                />
                 <span className="uppercase">ENG</span>
               </>
             )}
@@ -652,7 +685,7 @@ export default function App() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
               { label: teks.formPlaceName, key: 'name' },
-              { label: teks.formPlaceVisual, key: 'serial' },
+              { label: teks.formPlaceSerial, key: 'serial' },
               { label: teks.formPlaceModel, key: 'model' },
               { label: teks.formPlaceWifi, key: 'wifi' },
               { label: teks.formPlaceIp, key: 'ip' },
@@ -661,10 +694,10 @@ export default function App() {
               <input
                 key={kolom.key}
                 type="text"
-                value={dataForm[kolom.key] || ''}
+                value={dataForm[kolom.key]}
                 disabled={idSedangDiedit && kolom.key === 'serial'}
                 onChange={(e) => setDataForm({ ...dataForm, [kolom.key]: e.target.value })}
-                placeholder={kolom.key === 'serial' ? teks.formPlaceSerial : kolom.label}
+                placeholder={kolom.label}
                 className={`bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition ${idSedangDiedit && kolom.key === 'serial' ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
             ))}
@@ -716,7 +749,7 @@ export default function App() {
                 className={`bg-slate-900 border rounded-2xl p-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 transition-all ${perangkat.terbacaOtomatisBelumDisimpan
                   ? 'border-cyan-500 bg-gradient-to-r from-cyan-950/20 to-transparent'
                   : 'border-slate-800/80'
-                }`}
+                  }`}
               >
                 <div className="flex items-start gap-3 flex-1 w-full">
                   <div className={`p-3 rounded-xl border ${perangkat.isOnline ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-600'}`}>
@@ -728,7 +761,7 @@ export default function App() {
                       <span className={`text-[9px] font-black font-mono px-2 py-0.5 rounded-full border tracking-wider ${perangkat.isOnline
                         ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                         : 'bg-slate-950 border-slate-800 text-slate-500'
-                      }`}>
+                        }`}>
                         {perangkat.isOnline ? teks.tagOnline : teks.tagOffline}
                       </span>
                     </div>
@@ -753,6 +786,7 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2 w-full lg:w-auto justify-end relative">
+                  {/* Tombol Utama Kontrol AHK Engine */}
                   <button
                     onClick={() => ubahStatusAhk(perangkat)}
                     disabled={!perangkat.isOnline}
@@ -761,7 +795,7 @@ export default function App() {
                       : perangkat.ahkEnabled
                         ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
                         : 'bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
-                    }`}
+                      }`}
                   >
                     {!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}
                   </button>
@@ -778,8 +812,10 @@ export default function App() {
                       <MoreVertical className="w-4 h-4" />
                     </button>
 
+                    {/* Dropdown Menu Box */}
                     {activeDropdown === perangkat.serial && (
-                      <div className="absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden">
+                      <div className="absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100">
+                        {/* Opsi 1: Simpan atau Override Baseline */}
                         <button
                           onClick={() => {
                             simpanKeDatabasePusat(perangkat);
@@ -791,6 +827,7 @@ export default function App() {
                           {teks.formBtnSave}
                         </button>
 
+                        {/* Opsi 2: Ubah Data Manual */}
                         <button
                           onClick={() => {
                             setIdSedangDiedit(perangkat.serial);
@@ -811,6 +848,7 @@ export default function App() {
                           {teks.btnEdit}
                         </button>
 
+                        {/* Opsi 3: Hapus Data Permanen */}
                         <button
                           onClick={() => {
                             hapusPerangkatPermanen(perangkat.serial);
@@ -831,10 +869,12 @@ export default function App() {
         </div>
       </main>
 
-      {/* Confirmation Modal UI */}
+      {/* ==================================================================== */}
+      {/* CUSTOM POP-UP CONFIRMATION MODAL (TEMA DASHBOARD CYBERPUNK SLATE)   */}
+      {/* ==================================================================== */}
       {modalConfig.isOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-xl ${modalConfig.isDanger ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}`}>
                 <AlertCircle className="w-5 h-5" />
@@ -866,7 +906,7 @@ export default function App() {
 
       {/* Toast Notification */}
       {notifikasi && (
-        <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500">
+        <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500 animate-bounce">
           {notifikasi}
         </div>
       )}
