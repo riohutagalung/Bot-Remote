@@ -24,40 +24,19 @@ const URL_HTTP = "https://bot-remote-production.up.railway.app";
 const URL_WS = "wss://bot-remote-production.up.railway.app";
 
 // ====================================================================
-// LOGO RH PROPER (INLINE SVG - ANTI 404 & BERGAYA CYBERPUNK TECH)
+// LOGO RH (MENGGUNAKAN DIRECT LINK GAMBAR GOOGLE DRIVE)
 // ====================================================================
+const URL_LOGO_DRIVE = "https://lh3.googleusercontent.com/d/1u8FZ2SMV2oqVXZ2No8A7PiAHNWPhLMdt";
+
 const LogoRH = ({ className = "w-8 h-8" }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    viewBox="0 0 100 100" 
-    className={className} 
-    fill="none"
-  >
-    <defs>
-      <linearGradient id="rhGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#6366f1" /* Indigo */ />
-        <stop offset="100%" stopColor="#10b981" /* Emerald */ />
-      </linearGradient>
-    </defs>
-    {/* Monogram Huruf R dan H Terintegrasi Jalur Jaringan */}
-    <path 
-      d="M22 25 V75 M22 50 H48 M48 25 V75 M48 42 C60 42, 66 32, 76 32 C86 32, 88 42, 88 52 V75" 
-      stroke="url(#rhGradient)" 
-      strokeWidth="7" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
-    />
-    {/* Sinyal Kontrol / Node Pemancar */}
-    <circle cx="76" cy="32" r="3.5" fill="#10b981" />
-    <circle cx="88" cy="52" r="3.5" fill="#10b981" />
-    <path 
-      d="M65 18 C75 18, 85 28, 85 38" 
-      stroke="#6366f1" 
-      strokeWidth="3" 
-      strokeLinecap="round" 
-      strokeDasharray="2 3"
-    />
-  </svg>
+  <img 
+    src={URL_LOGO_DRIVE} 
+    alt="RH Logo" 
+    className={`${className} object-contain`}
+    onError={(e) => {
+      console.error("Gagal memuat logo dari Google Drive.");
+    }}
+  />
 );
 
 const KAMUS_BAHASA = {
@@ -83,6 +62,7 @@ const KAMUS_BAHASA = {
     formPlaceWifi: "Nama WiFi Target",
     formPlaceIp: "Alamat IP Lokal",
     formPlaceMac: "MAC Address",
+    formPlaceScript: "Nama Script AHK (Opsional)",
     formPlaceScript: "Nama Script AHK (Opsional)",
     formBtnSave: "Simpan Permanen",
     formBtnCancel: "Batal",
@@ -516,7 +496,7 @@ export default function App() {
   }
 
   // ====================================================================
-  // COMPONENT TAMPILAN HALAMAN LOGIN (SUDAH DI-FIX TOTAL STRUKTURNYA)
+  // COMPONENT TAMPILAN HALAMAN LOGIN
   // ====================================================================
   if (!sudahLogin) {
     return (
@@ -556,7 +536,7 @@ export default function App() {
         
         <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
           <div className="text-center space-y-4">
-            {/* Box Wadah Logo RH Proper */}
+            {/* Box Wadah Logo RH */}
             <div className="w-16 h-16 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner p-2.5">
               <LogoRH className="w-full h-full text-indigo-400" />
             </div>
@@ -793,7 +773,7 @@ export default function App() {
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${!perangkat.isOnline
                       ? 'bg-slate-950 border border-slate-800 text-slate-600 cursor-not-allowed'
                       : perangkat.ahkEnabled
-                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
                         : 'bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
                       }`}
                   >
@@ -870,7 +850,7 @@ export default function App() {
       </main>
 
       {/* ==================================================================== */}
-      {/* CUSTOM POP-UP CONFIRMATION MODAL (TEMA DASHBOARD CYBERPUNK SLATE)   */}
+      {/* CUSTOM POP-UP CONFIRMATION MODAL                                    */}
       {/* ==================================================================== */}
       {modalConfig.isOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
