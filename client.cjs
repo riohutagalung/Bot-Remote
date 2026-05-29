@@ -1,4 +1,4 @@
-// RH Remote Client - Stable Edition (Reconnect + Detect Standby)
+// RH Remote Client - Fixed handshake & telemetry link
 const WebSocket = require("ws");
 const { exec, execSync } = require("child_process");
 const os = require("os");
@@ -9,54 +9,85 @@ const SERVER_URL = "wss://bot-remote-production.up.railway.app";
 const CURRENT_DIR = process.pkg ? path.dirname(process.execPath) : __dirname;
 
 let wsGlobal = null;
-let statusAhkSaatIni = null; // null = belum diketahui
+let statusAhkSaatIni = false;
 
-// ---------- utilitas sistem ----------
+// ---------- utilitas ----------
 function getSystemInfo() {
   return {
     hostname: os.hostname(),
     platform: os.platform(),
     arch: os.arch(),
-    serial: getSerialNumber(),
-    wifi: getWifiSSID(),
-    ip: getLocalIP(),
+    serial: getSerial(),
+    wifi: getWifi(),
+    ip: getIP(),
     mac: getMAC()
   };
 }
-
-function getSerialNumber() {
+function getSerial() {
   try {
     const o = execSync("wmic bios get serialnumber /value", { encoding: "utf8" });
     const m = o.match(/SerialNumber=(\\S+)/);
     return m ? m[1] : "UNKNOWN";
   } catch { return "UNKNOWN"; }
 }
-function getWifiSSID() {
+function getWifi() {
   try {
     const o = execSync("netsh wlan show interfaces", { encoding: "utf8" });
     const m = o.match(/SSID\\s*:\\s*(.+)/);
     return m ? m[1].trim() : "-";
   } catch { return "-"; }
 }
-function getLocalIP() {
-  const nets = os.networkInterfaces();
-  for (const name of Object.keys(nets))
-    for (const n of nets[name]) if (n.family === "IPv4" && !n.internal) return n.address;
+function getIP() {
+  const n = os.networkInterfaces();
+  for (const k of Object.keys(n))
+    for (const f of n[k]) if (f.family === "IPv4" && !f.internal) return f.address;
   return "-";
 }
 function getMAC() {
-  const nets = os.networkInterfaces();
-  for (const name of Object.keys(nets))
-    for (const n of nets[name])
-      if (n.mac && n.mac !== "00:00:00:00:00:00") return n.mac;
+  const n = os.networkInterfaces();
+  for (const k of Object.keys(n))
+    for (const f of n[k])
+      if (f.mac && f.mac !== "00:00:00:00:00:00") return f.mac;
   return "-";
 }
 
-// ---------- fungsi kirim status ----------
-function kirimTelemetri() {
+// ---------- kontrol AHK ----------
+function kendalikanAhkBalikLayar(aksi, namaScript = "") {
+  let cmd = "";
+  if (aksi === "start") {
+    let file = namaScript;
+    if (!file) {
+      const files = fs.readdirSync(CURRENT_DIR);
+      const ahk = files.find(f => f.toLowerCase().endsWith(".ahk"));
+      if (!ahk) return console.log("[!] Tidak ada file .ahk ditemukan.");
+      file = ahk;
+    }
+    const full = path.join(CURRENT_DIR, file);
+    cmd = `start "" "${full}"`;
+    console.log(`[RUN] ${full}`);
+  } else if (aksi === "stop") {
+    cmd = `taskkill /F /IM AutoHotkey*.exe >nul 2>nul`;
+    console.log("[KILL] Menonaktifkan AutoHotkey.exe");
+  }
+  exec(cmd, () => setTimeout(periksaStatus, 1000));
+}
+
+// ---------- monitoring ----------
+function periksaStatus() {
+  exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, out) => {
+    const aktif = !err && out.toLowerCase().includes("autohotkey.exe");
+    if (statusAhkSaatIni !== aktif) {
+      statusAhkSaatIni = aktif;
+      kirimTelemetri();
+    }
+  });
+}
+
+// kirim selalu (termasuk waktu awal konek)
+function kirimTelemetri(force = false) {
   if (!wsGlobal || wsGlobal.readyState !== WebSocket.OPEN) return;
   const info = getSystemInfo();
-  const payload = {
+  const data = {
     type: "ahk_status",
     id: info.serial.replace(/[^\w-]/g, "_"),
     ahkEnabled: statusAhkSaatIni,
@@ -66,54 +97,8 @@ function kirimTelemetri() {
     ip: info.ip,
     mac: info.mac
   };
-  wsGlobal.send(JSON.stringify(payload));
+  wsGlobal.send(JSON.stringify(data));
   console.log(`[Telemetry] Status => ${statusAhkSaatIni ? "ON" : "OFF"}`);
-}
-
-// ---------- kontrol AHK ----------
-function kendalikanAhkBalikLayar(aksi, scriptName = "") {
-  return new Promise(resolve => {
-    if (os.platform() !== "win32") return resolve();
-
-    let cmd = "";
-    if (aksi === "start") {
-      let fileTarget = scriptName;
-      if (!fileTarget) {
-        const files = fs.readdirSync(CURRENT_DIR);
-        const ahk = files.find(f => f.toLowerCase().endsWith(".ahk"));
-        if (!ahk) {
-          console.log("[!] Tidak ada file .ahk di folder client");
-          return resolve();
-        }
-        fileTarget = ahk;
-      }
-      const full = path.join(CURRENT_DIR, fileTarget);
-      cmd = `start "" "${full}"`;
-      console.log(`[RUN] Jalankan AHK: ${full}`);
-    } else if (aksi === "stop") {
-      cmd = `taskkill /F /IM AutoHotkey*.exe >nul 2>nul`;
-      console.log("[KILL] Matikan AutoHotkey.exe");
-    }
-
-    exec(cmd, () => {
-      setTimeout(() => periksaStatusAhk().then(resolve), 1000);
-    });
-  });
-}
-
-// ---------- deteksi proses ----------
-function periksaStatusAhk() {
-  return new Promise(resolve => {
-    exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, out) => {
-      const aktif = !err && out.toLowerCase().includes("autohotkey.exe");
-      // kirim hanya kalau berubah
-      if (statusAhkSaatIni !== aktif) {
-        statusAhkSaatIni = aktif;
-        kirimTelemetri();
-      }
-      resolve();
-    });
-  });
 }
 
 // ---------- websocket ----------
@@ -122,9 +107,23 @@ function connect() {
   wsGlobal = ws;
 
   ws.on("open", () => {
-    console.log("✔ Connected to server");
-    periksaStatusAhk();
-    setInterval(periksaStatusAhk, 3000); // cek tiap 3 detik
+    console.log("✔ Connected to server (Telemetry linked)");
+    // kirim handshake identitas
+    const info = getSystemInfo();
+    ws.send(JSON.stringify({
+      id: info.serial.replace(/[^\w-]/g, "_"),
+      hostname: info.hostname,
+      model: `${info.platform} (${info.arch})`,
+      wifi: info.wifi,
+      ip: info.ip,
+      mac: info.mac,
+      ahkEnabled: statusAhkSaatIni
+    }));
+
+    // periksa status awal dan kirim telemetri
+    periksaStatus();
+    kirimTelemetri(true);
+    setInterval(periksaStatus, 3000);
   });
 
   ws.on("message", msg => {
@@ -134,16 +133,14 @@ function connect() {
         if (data.action === "start_ahk") kendalikanAhkBalikLayar("start", data.scriptName || "");
         if (data.action === "stop_ahk") kendalikanAhkBalikLayar("stop");
       }
-    } catch (e) { console.error("Parse error:", e.message); }
+    } catch (e) { console.error("Message parse error:", e.message); }
   });
 
   ws.on("close", () => {
-    console.log("⚠ Connection lost, retrying...");
+    console.log("⚠ Socket closed, reconnecting...");
     setTimeout(connect, 5000);
   });
-
-  ws.on("error", () => {});
 }
 
-console.log("Starting RH Remote Client (Base + Standby Detection)...");
+console.log("Starting RH Remote Client (Handshake Fixed Edition)...");
 connect();
