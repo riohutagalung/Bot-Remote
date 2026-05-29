@@ -12,13 +12,15 @@ const app = express();
 // =================================================================
 // PERBAIKAN DI SINI: Mengizinkan PUT & OPTIONS agar Vercel tidak diblokir
 // =================================================================
-app.use(cors({ 
-  origin: '*', 
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
-app.options('*', cors()); // Bypass preflight request dari browser
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+app.options("*", cors()); // Bypass preflight request dari browser
 
 app.use(express.json());
 
@@ -34,14 +36,18 @@ function loadCloudData() {
     if (fs.existsSync(DATA_FILE)) {
       return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
     }
-  } catch (e) { console.error("Gagal baca database:", e.message); }
+  } catch (e) {
+    console.error("Gagal baca database:", e.message);
+  }
   return {};
 }
 
 function saveCloudData(data) {
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
-  } catch (e) { console.error("Gagal simpan database:", e.message); }
+  } catch (e) {
+    console.error("Gagal simpan database:", e.message);
+  }
 }
 
 // Inisialisasi data awal
@@ -67,23 +73,21 @@ app.post("/api/login", (req, res) => {
 // API GET DEVICES
 // =================================================================
 app.get("/api/devices", (req, res) => {
-  const devicesArray = Object.values(savedDevices).map(device => {
+  const devicesArray = Object.values(savedDevices).map((device) => {
     const cleanId = device.id?.toString().trim().toLowerCase();
-    const isLive = deviceConnections.has(cleanId) && deviceConnections.get(cleanId).readyState === 1;
+    const isLive =
+      deviceConnections.has(cleanId) &&
+      deviceConnections.get(cleanId).readyState === 1;
     return { ...device, status: isLive ? "Online" : "Offline" };
   });
   res.json({ devices: devicesArray });
 });
 
 // =================================================================
-// API DELETE DEVICE DENGAN TOKEN
+// API DELETE DEVICE TANPA TOKEN (sesuai permintaan)
 // =================================================================
 app.delete("/api/devices/:id", (req, res) => {
   const { id } = req.params;
-  const authHeader = req.headers['authorization'];
-  if (authHeader !== `Bearer ${SECURE_TOKEN}`) {
-    return res.status(403).json({ error: "Sandi salah atau Kedaluwarsa! Anda tidak berhak menghapus perangkat ini (403)." });
-  }
 
   const cleanId = id.toString().trim().toLowerCase();
   let targetKey = null;
@@ -91,8 +95,10 @@ app.delete("/api/devices/:id", (req, res) => {
   if (savedDevices[cleanId]) {
     targetKey = cleanId;
   } else {
-    targetKey = Object.keys(savedDevices).find(key =>
-      savedDevices[key].serial && savedDevices[key].serial.toString().trim().toLowerCase() === cleanId
+    targetKey = Object.keys(savedDevices).find(
+      (key) =>
+        savedDevices[key].serial &&
+        savedDevices[key].serial.toString().trim().toLowerCase() === cleanId
     );
   }
 
@@ -106,7 +112,10 @@ app.delete("/api/devices/:id", (req, res) => {
     }
 
     broadcastToWeb();
-    return res.json({ success: true, message: "Perangkat berhasil dihapus dari cloud!" });
+    return res.json({
+      success: true,
+      message: "Perangkat berhasil dihapus dari cloud!",
+    });
   }
 
   res.status(404).json({ error: "Perangkat tidak ditemukan" });
@@ -117,13 +126,16 @@ app.delete("/api/devices/:id", (req, res) => {
 // =================================================================
 app.post("/api/command", (req, res) => {
   const { deviceId, command } = req.body || {};
-  if (!deviceId || !command) return res.status(400).json({ error: "Data kurang" });
+  if (!deviceId || !command)
+    return res.status(400).json({ error: "Data kurang" });
 
   const cleanId = deviceId.toString().trim().toLowerCase();
   const clientWs = deviceConnections.get(cleanId);
 
   if (!clientWs || clientWs.readyState !== 1) {
-    return res.status(404).json({ error: "Laptop sedang Offline, tidak bisa menerima perintah remote." });
+    return res
+      .status(404)
+      .json({ error: "Laptop sedang Offline, tidak bisa menerima perintah remote." });
   }
 
   // Update status sementara di cloud (biar dashboard langsung refresh)
@@ -154,21 +166,34 @@ app.put("/api/devices/:id", (req, res) => {
   savedDevices[cleanId] = {
     ...savedDevices[cleanId],
     ...updatedData,
-    name: updatedData.name || updatedData.hostname || savedDevices[cleanId].name || "Target PC",
-    hostname: updatedData.hostname || updatedData.name || savedDevices[cleanId].hostname || "Target PC",
-    lastSeen: new Date()
+    name:
+      updatedData.name ||
+      updatedData.hostname ||
+      savedDevices[cleanId].name ||
+      "Target PC",
+    hostname:
+      updatedData.hostname ||
+      updatedData.name ||
+      savedDevices[cleanId].hostname ||
+      "Target PC",
+    lastSeen: new Date(),
   };
 
   saveCloudData(savedDevices);
   broadcastToWeb();
 
-  return res.json({ success: true, message: "Cloud database updated successfully!" });
+  return res.json({
+    success: true,
+    message: "Cloud database updated successfully!",
+  });
 });
 
 // =================================================================
 // WEBSOCKET SERVER
 // =================================================================
-const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const server = app.listen(PORT, () =>
+  console.log(`Server running on port ${PORT}`)
+);
 const wss = new WebSocketServer({ server });
 
 // Ketika client (Laptop) terhubung via WebSocket
@@ -195,8 +220,11 @@ wss.on("connection", (ws) => {
           wifi: data.wifi || "-",
           ip: data.ip || "-",
           mac: data.mac || "-",
-          ahkEnabled: typeof data.ahkEnabled === "boolean" ? data.ahkEnabled : false,
-          lastSeen: new Date()
+          ahkEnabled:
+            typeof data.ahkEnabled === "boolean"
+              ? data.ahkEnabled
+              : false,
+          lastSeen: new Date(),
         };
 
         saveCloudData(savedDevices);
@@ -215,7 +243,6 @@ wss.on("connection", (ws) => {
         }
         return;
       }
-
     } catch (err) {
       console.error("WS parse failed:", err.message);
     }
@@ -233,9 +260,11 @@ wss.on("connection", (ws) => {
 // BROADCAST FUNCTION
 // =================================================================
 function broadcastToWeb() {
-  const devicesArray = Object.values(savedDevices).map(device => {
+  const devicesArray = Object.values(savedDevices).map((device) => {
     const cleanId = device.id?.toString().trim().toLowerCase();
-    const isLive = deviceConnections.has(cleanId) && deviceConnections.get(cleanId).readyState === 1;
+    const isLive =
+      deviceConnections.has(cleanId) &&
+      deviceConnections.get(cleanId).readyState === 1;
     return { ...device, status: isLive ? "Online" : "Offline" };
   });
 
