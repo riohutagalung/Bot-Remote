@@ -1,4 +1,6 @@
-// RH Remote Client - Simple AHK Controller (Final)
+// =============================================================
+// RH Remote Client - stable edition (logic OFF tetap, ON diperbaiki)
+// =============================================================
 const WebSocket = require("ws");
 const { exec, execSync } = require("child_process");
 const os = require("os");
@@ -11,88 +13,117 @@ const CURRENT_DIR = process.pkg ? path.dirname(process.execPath) : __dirname;
 let wsGlobal = null;
 let statusAhkSaatIni = false;
 
-// ===== utilitas sistem =====
+// ========== helper info sistem ==========
 function getSystemInfo() {
   return {
     hostname: os.hostname(),
     platform: os.platform(),
     arch: os.arch(),
-    serial: getSerial(),
-    wifi: getWifi(),
-    ip: getIP(),
-    mac: getMAC()
+    serial: getSerialNumber(),
+    wifi: getWifiSSID(),
+    ip: getLocalIP(),
+    mac: getMAC(),
   };
 }
-function getSerial() {
+function getSerialNumber() {
   try {
     if (os.platform() === "win32") {
       const out = execSync("wmic bios get serialnumber /value", { encoding: "utf8" });
-      const m = out.match(/SerialNumber=(\S+)/);
-      return m ? m[1] : "UNKNOWN";
+      const m = out.match(/SerialNumber=(\\S+)/);
+      return m ? m[1] : "UNKNOWN_SERIAL";
     }
   } catch {}
-  return "UNKNOWN";
+  return "UNKNOWN_SERIAL";
 }
-function getWifi() {
+function getWifiSSID() {
   try {
-    const out = execSync("netsh wlan show interfaces", { encoding: "utf8" });
-    const m = out.match(/SSID\s*:\s*(.+)/);
-    return m ? m[1].trim() : "-";
-  } catch { return "-"; }
+    if (os.platform() === "win32") {
+      const out = execSync("netsh wlan show interfaces", { encoding: "utf8" });
+      const m = out.match(/SSID\\s*:\\s*(.+)/);
+      return m ? m[1].trim() : "-";
+    }
+  } catch {}
+  return "-";
 }
-function getIP() {
-  const n = os.networkInterfaces();
-  for (const i of Object.keys(n)) {
-    for (const f of n[i]) if (f.family === "IPv4" && !f.internal) return f.address;
+function getLocalIP() {
+  const i = os.networkInterfaces();
+  for (const n of Object.keys(i)) {
+    for (const f of i[n]) if (f.family === "IPv4" && !f.internal) return f.address;
   }
   return "-";
 }
 function getMAC() {
-  const n = os.networkInterfaces();
-  for (const i of Object.keys(n)) {
-    for (const f of n[i])
-      if (f.mac && f.mac !== "00:00:00:00:00:00") return f.mac;
+  const i = os.networkInterfaces();
+  for (const n of Object.keys(i)) {
+    for (const f of i[n]) if (f.mac && f.mac !== "00:00:00:00:00:00") return f.mac;
   }
   return "-";
 }
 
-// ===== kontrol =====
-function jalankanAHK() {
-  try {
-    const files = fs.readdirSync(CURRENT_DIR);
-    const ahk = files.find(f => f.toLowerCase().endsWith(".ahk"));
-    if (!ahk) return console.log("[!] Tidak ada file .ahk ditemukan.");
+// ============================================================
+// START / STOP CONTROL (logic lama, tidak diubah)
+// ============================================================
+function kendalikanAhkBalikLayar(aksi, scriptName = "") {
+  return new Promise((resolve) => {
+    if (os.platform() !== "win32") return resolve();
 
-    const full = path.join(CURRENT_DIR, ahk);
-    exec(`start "" "${full}"`);
-    console.log(`[RUN] ${full}`);
-    setTimeout(periksaStatus, 1000);
-  } catch (e) {
-    console.error("Gagal menjalankan AHK:", e.message);
-  }
-}
+    let cmd = "";
+    if (aksi === "start") {
+      let fileTarget = scriptName;
+      if (!fileTarget) {
+        try {
+          const files = fs.readdirSync(CURRENT_DIR);
+          const ahkFiles = files.filter(f => f.toLowerCase().endsWith(".ahk"));
+          if (ahkFiles.length > 0) fileTarget = ahkFiles[0];
+        } catch (e) {
+          console.error("Gagal membaca folder:", e.message);
+        }
+      }
+      if (!fileTarget) {
+        console.log("[!] Tidak ada file .ahk ditemukan di folder client.");
+        return resolve();
+      }
 
-function matikanAHK() {
-  console.log("[KILL] Menutup semua AutoHotkey.exe ...");
-  // Tambahkan semua varian nama proses agar benar-benar mati
-  exec(
-    `taskkill /F /IM AutoHotkey.exe >nul 2>nul & taskkill /F /IM AutoHotkeyU64.exe >nul 2>nul & taskkill /F /IM AutoHotkeyU32.exe >nul 2>nul`,
-    () => {
-      setTimeout(periksaStatus, 1500);
+      const full = path.join(CURRENT_DIR, fileTarget);
+      // jalankan .ahk langsung (biar Windows manggil AutoHotkey yang terasosiasi)
+      cmd = `start "" "${full}"`;
+      console.log(`[RUN] Menjalankan .ahk: ${full}`);
+    } else if (aksi === "stop") {
+      // logic lama untuk menonaktifkan
+      cmd = [
+        `taskkill /F /IM AutoHotkey.exe >nul 2>nul`,
+        `taskkill /F /IM AutoHotkeyU64.exe >nul 2>nul`,
+        `taskkill /F /IM AutoHotkeyU32.exe >nul 2>nul`
+      ].join(" & ");
+      console.log("[KILL] Mematikan AutoHotkey process ...");
     }
-  );
-}
 
-function periksaStatus() {
-  exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, out) => {
-    const aktif = !err && out.toLowerCase().includes("autohotkey.exe");
-    if (statusAhkSaatIni !== aktif) {
-      statusAhkSaatIni = aktif;
-      kirimTelemetri();
-    }
+    exec(cmd, () => {
+      setTimeout(() => {
+        periksaStatusAhk(); // update status ke web
+        resolve();
+      }, 1000);
+    });
   });
 }
 
+// ============================================================
+// CEK STATUS PROSES (perbaikan logic ON → kirim sinyal standby)
+// ============================================================
+function periksaStatusAhk() {
+  if (os.platform() !== "win32") return;
+  exec('tasklist /FI "IMAGENAME eq AutoHotkey.exe"', (err, out) => {
+    const aktif = !err && out.toLowerCase().includes("autohotkey.exe");
+
+    // kirim sinyal walau status sama; supaya dashboard tahu jika AHK standby manual
+    statusAhkSaatIni = aktif;
+    kirimTelemetri();
+  });
+}
+
+// ============================================================
+// KIRIM STATUS KE SERVER
+// ============================================================
 function kirimTelemetri() {
   if (!wsGlobal || wsGlobal.readyState !== WebSocket.OPEN) return;
   const info = getSystemInfo();
@@ -107,52 +138,40 @@ function kirimTelemetri() {
     mac: info.mac
   };
   wsGlobal.send(JSON.stringify(data));
-  console.log(`[Telemetry] Status => ${statusAhkSaatIni ? "ON" : "OFF"}`);
+  console.log(`[Telemetry] Status dikirim => ${statusAhkSaatIni ? "ON" : "OFF"}`);
 }
 
-// ===== koneksi websocket =====
-function connect() {
+// ============================================================
+// WEBSOCKET CONNECTION (logic lama tetap)
+// ============================================================
+function connectToServer() {
   const ws = new WebSocket(SERVER_URL);
   wsGlobal = ws;
 
   ws.on("open", () => {
-    console.log("✔ Connected to server");
-
-    // 🔹 Kirim identitas awal supaya server & dashboard mengenali client
-    const info = getSystemInfo();
-    ws.send(JSON.stringify({
-      id: info.serial.replace(/[^\w-]/g, "_"),
-      hostname: info.hostname,
-      model: `${info.platform} (${info.arch})`,
-      wifi: info.wifi,
-      ip: info.ip,
-      mac: info.mac,
-      ahkEnabled: statusAhkSaatIni
-    }));
-
-    periksaStatus();
-    setInterval(periksaStatus, 3000);
+    console.log("✔ Connected ke server pusat");
+    periksaStatusAhk();
+    setInterval(periksaStatusAhk, 3000); // loop cek secara periodik
   });
 
   ws.on("message", (msg) => {
     try {
       const data = JSON.parse(msg.toString());
-      if (data.type === "execute_command") {
-        if (data.action === "start_ahk") jalankanAHK();
-        if (data.action === "stop_ahk") matikanAHK();
+      if (data && data.type === "execute_command") {
+        if (data.action === "start_ahk") kendalikanAhkBalikLayar("start", data.scriptName || "");
+        if (data.action === "stop_ahk") kendalikanAhkBalikLayar("stop");
       }
     } catch (e) {
-      console.error("Parse error:", e.message);
+      console.error("Error parse WS message:", e.message);
     }
   });
 
   ws.on("close", () => {
-    console.log("⚠ Disconnected, retrying...");
-    setTimeout(connect, 5000);
+    console.log("⚠ WS ditutup, mencoba ulang 5s...");
+    setTimeout(connectToServer, 5000);
   });
-
   ws.on("error", () => {});
 }
 
-console.log("Starting RH Remote Client (Simple Control - Final)...");
-connect();
+console.log("Starting RH Remote Client (Stable Standby Edition)...");
+connectToServer();
