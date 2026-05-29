@@ -515,8 +515,13 @@ export default function App() {
         <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
           <div className="text-center space-y-2">
             <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
+              <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner overflow-hidden">
+  <img
+    src="/logo-rh.svg"
+    alt="RH Logo"
+    className="w-7 h-7 object-contain"
+  />
+</div>
             <h1 className="text-xl font-black text-white tracking-tight uppercase">{teks.authTitle}</h1>
             <p className="text-xs text-slate-400">{teks.authSub}</p>
           </div>
@@ -543,9 +548,13 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
       <header className="bg-slate-900/80 border-b border-slate-800/80 sticky top-0 backdrop-blur-md z-40 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-600 rounded-xl text-white shadow-md">
-            <Sliders className="w-5 h-5" />
-          </div>
+          <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md overflow-hidden">
+  <img
+    src="/logo-rh.svg"
+    alt="RH Logo"
+    className="w-6 h-6 object-contain"
+  />
+</div>
           <div>
             <h1 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
               RH Control Panel <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono px-1.5 py-0.5 rounded">v5.0</span>
