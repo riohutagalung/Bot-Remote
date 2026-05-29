@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  Download, 
-  Upload, 
-  Trash2, 
-  AlertCircle, 
-  Search, 
-  Laptop, 
+import {
+  Download,
+  Upload,
+  Trash2,
+  AlertCircle,
+  Search,
+  Laptop,
   Plus,
   Sliders,
   ShieldCheck,
@@ -129,7 +129,6 @@ const KAMUS_BAHASA = {
 };
 
 export default function App() {
-  // Mengunci default bahasa ke English (EN) sesuai request abang
   const [bahasa, setBahasa] = useState('EN');
   const teks = KAMUS_BAHASA[bahasa];
 
@@ -139,7 +138,7 @@ export default function App() {
 
   const [perangkatDatabase, setPerangkatDatabase] = useState([]);
   const [perangkatOnlineLive, setPerangkatOnlineLive] = useState([]);
-  
+
   const [kataKunciCari, setKataKunciCari] = useState('');
   const [wsTerhubung, setWsTerhubung] = useState(false);
   const [notifikasi, setNotifikasi] = useState(null);
@@ -147,7 +146,6 @@ export default function App() {
   const [namaScriptInput, setNamaScriptInput] = useState({});
   const [activeDropdown, setActiveDropdown] = useState(null);
 
-  // State untuk kontrol Custom Modal Bertema khusus (Pengganti window.confirm / alert)
   const [modalConfig, setModalConfig] = useState({
     isOpen: false,
     title: '',
@@ -168,7 +166,6 @@ export default function App() {
     setCekSesiSelesai(true);
   }, []);
 
-  // Menutup dropdown menu jika klik di luar area komponen
   useEffect(() => {
     const closeAllDropdowns = () => setActiveDropdown(null);
     window.addEventListener('click', closeAllDropdowns);
@@ -241,7 +238,6 @@ export default function App() {
     setTimeout(() => setNotifikasi(null), 3000);
   };
 
-  // Helper Custom Pop-up Modal Bertema Pengganti window.confirm bawaan browser
   const triggerCustomConfirm = (title, message, isDanger, onConfirmBlock) => {
     setModalConfig({
       isOpen: true,
@@ -265,7 +261,7 @@ export default function App() {
     });
 
     const serialTerprosesDariDb = new Set();
-    
+
     perangkatDatabase.forEach(perangkat => {
       if (!perangkat || !perangkat.serial) return;
       const kunciSerial = perangkat.serial.trim().toLowerCase();
@@ -326,10 +322,10 @@ export default function App() {
       const respon = await fetch(`${URL_HTTP}/api/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          deviceId: perangkat.serial, 
+        body: JSON.stringify({
+          deviceId: perangkat.serial,
           command: aksiPerintah,
-          scriptName: scriptSpesifik 
+          scriptName: scriptSpesifik
         }),
       });
       if (respon.ok) {
@@ -343,7 +339,7 @@ export default function App() {
 
   const simpanKeDatabasePusat = async (dataTarget) => {
     const payload = dataTarget?.serial ? dataTarget : dataForm;
-    
+
     if (!payload.serial) {
       tampilkanNotifikasi(teks.alertSerial);
       return;
@@ -351,7 +347,7 @@ export default function App() {
     try {
       const targetIdRoute = idSedangDiedit ? idSedangDiedit : payload.serial.toString().trim();
       const jalurUrl = `${URL_HTTP}/api/devices/${targetIdRoute}`;
-      
+
       const hasilKirim = await fetch(jalurUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -379,15 +375,12 @@ export default function App() {
     }
   };
 
-  // Mekanisme Double Confirmation Menggunakan Custom Theme Pop-up Modal 
   const hapusPerangkatPermanen = (serialTarget) => {
-    // Konfirmasi Tingkat Pertama (Custom Modal UI)
     triggerCustomConfirm(teks.modalConfirmTitle, teks.confirmDelete1, false, () => {
-      // Konfirmasi Tingkat Kedua (Custom Modal UI - Alur Bahaya / Danger Workflows)
       setTimeout(() => {
         triggerCustomConfirm(teks.modalDangerTitle, teks.confirmDelete2, true, async () => {
           try {
-            const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, { 
+            const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' }
             });
@@ -401,7 +394,7 @@ export default function App() {
             tampilkanNotifikasi('Purge failure');
           }
         });
-      }, 400); 
+      }, 400);
     });
   };
 
@@ -415,8 +408,8 @@ export default function App() {
       const data = await kirim.json();
 
       if (kirim.ok && data.success) {
-        sessionStorage.setItem(SESS_KEY, data.token); 
-        localStorage.setItem(SESS_KEY, data.token); 
+        sessionStorage.setItem(SESS_KEY, data.token);
+        localStorage.setItem(SESS_KEY, data.token);
         setSudahLogin(true);
       } else {
         tampilkanNotifikasi(data.message || 'Access Refused');
@@ -440,13 +433,13 @@ export default function App() {
   const lakukanImporData = (elemen) => {
     const pembacaBerkas = new FileReader();
     if (!elemen.target.files[0]) return;
-    
+
     pembacaBerkas.readAsText(elemen.target.files[0], "UTF-8");
     pembacaBerkas.onload = async (peristiwa) => {
       try {
         const dataUrai = JSON.parse(peristiwa.target.result);
         if (!Array.isArray(dataUrai)) return;
-        
+
         for (const item of dataUrai) {
           if (item.serial || item.id) {
             const targetKey = item.serial || item.id;
@@ -465,7 +458,7 @@ export default function App() {
     };
   };
 
-  const daftarHasilPencarian = masterDaftarPerangkat.filter(p => 
+  const daftarHasilPencarian = masterDaftarPerangkat.filter(p =>
     Object.values(p).join(' ').toLowerCase().includes(kataKunciCari.toLowerCase())
   );
 
@@ -482,63 +475,60 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute top-4 right-4 z-50">
-          {/* Tombol Bendera Minimalis di Halaman Login */}
-<button
-  onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
-  className="flex items-center gap-1.5 px-3 py-1.5
-             bg-slate-900 border border-slate-800 rounded-xl
-             text-xs font-bold text-indigo-400 hover:bg-slate-800
-             transition shadow-md"
->
-  {bahasa === "ID" ? (
-    <>
-      <img
-        src="https://flagcdn.com/id.svg"
-        alt="Indonesia"
-        className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-      />
-      <span className="uppercase">ID</span>
-    </>
-  ) : (
-    <>
-      <img
-        src="https://flagcdn.com/us.svg"
-        alt="English"
-        className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-      />
-      <span className="uppercase">ENG</span>
-    </>
-  )}
-</button>
+          <button
+            onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-indigo-400 hover:bg-slate-800 transition shadow-md"
+          >
+            {bahasa === "ID" ? (
+              <>
+                <img
+                  src="https://flagcdn.com/id.svg"
+                  alt="Indonesia"
+                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+                />
+                <span className="uppercase">ID</span>
+              </>
+            ) : (
+              <>
+                <img
+                  src="https://flagcdn.com/us.svg"
+                  alt="English"
+                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+                />
+                <span className="uppercase">ENG</span>
+              </>
+            )}
+          </button>
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_60%)]" />
         <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
-          <div className="text-center space-y-2">
-            <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner">
-              <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner overflow-hidden">
-  <img
-    src="/logo-rh.svg"
-    alt="RH Logo"
-    className="w-7 h-7 object-contain"
-  />
-</div>
-            <h1 className="text-xl font-black text-white tracking-tight uppercase">{teks.authTitle}</h1>
-            <p className="text-xs text-slate-400">{teks.authSub}</p>
+          <div className="text-center space-y-4">
+            <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner overflow-hidden">
+              <img
+                src="/logo-rh.svg"
+                alt="RH Logo"
+                className="w-8 h-8 object-contain"
+              />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-xl font-black text-white tracking-tight uppercase">{teks.authTitle}</h1>
+              <p className="text-xs text-slate-400">{teks.authSub}</p>
+            </div>
+            <input
+              type="password"
+              value={inputPassword}
+              onChange={(e) => setInputPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && eksekusiLoginAPI()}
+              placeholder={teks.authPlace}
+              className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-center text-sm focus:outline-none focus:border-indigo-500 font-mono transition"
+            />
+            <button
+              onClick={eksekusiLoginAPI}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-xs tracking-wider uppercase transition-all"
+            >
+              {teks.authBtn}
+            </button>
           </div>
-          <input
-            type="password"
-            value={inputPassword}
-            onChange={(e) => setInputPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && eksekusiLoginAPI()}
-            placeholder={teks.authPlace}
-            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-center text-sm focus:outline-none focus:border-indigo-500 font-mono transition"
-          />
-          <button 
-            onClick={eksekusiLoginAPI} 
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-xs tracking-wider uppercase transition-all"
-          >
-            {teks.authBtn}
-          </button>
         </div>
       </div>
     );
@@ -549,12 +539,12 @@ export default function App() {
       <header className="bg-slate-900/80 border-b border-slate-800/80 sticky top-0 backdrop-blur-md z-40 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md overflow-hidden">
-  <img
-    src="/logo-rh.svg"
-    alt="RH Logo"
-    className="w-6 h-6 object-contain"
-  />
-</div>
+            <img
+              src="/logo-rh.svg"
+              alt="RH Logo"
+              className="w-6 h-6 object-contain"
+            />
+          </div>
           <div>
             <h1 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
               RH Control Panel <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono px-1.5 py-0.5 rounded">v5.0</span>
@@ -562,43 +552,40 @@ export default function App() {
             <p className="text-xs text-slate-400 font-medium">{teks.subTitle}</p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          {/* Tombol Bendera Minimalis di Header Dashboard */}
-<button
-  onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
-  className="flex items-center gap-1.5 px-3 py-1.5
-             bg-slate-800 hover:bg-slate-700 border border-slate-700
-             text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
->
-  {bahasa === "ID" ? (
-    <>
-      <img
-        src="https://flagcdn.com/id.svg"
-        alt="Indonesia"
-        className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-      />
-      <span className="uppercase">ID</span>
-    </>
-  ) : (
-    <>
-      <img
-        src="https://flagcdn.com/us.svg"
-        alt="English"
-        className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-      />
-      <span className="uppercase">ENG</span>
-    </>
-  )}
-</button>
-          
+          <button
+            onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
+          >
+            {bahasa === "ID" ? (
+              <>
+                <img
+                  src="https://flagcdn.com/id.svg"
+                  alt="Indonesia"
+                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+                />
+                <span className="uppercase">ID</span>
+              </>
+            ) : (
+              <>
+                <img
+                  src="https://flagcdn.com/us.svg"
+                  alt="English"
+                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
+                />
+                <span className="uppercase">ENG</span>
+              </>
+            )}
+          </button>
+
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold font-mono border ${wsTerhubung ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'}`}>
             <Radio className={`w-3.5 h-3.5 ${wsTerhubung ? 'animate-pulse' : ''}`} />
             {wsTerhubung ? teks.statusWsActive : teks.statusWsClose}
           </div>
-          
-          <button 
-            onClick={() => { localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY); setSudahLogin(false); }} 
+
+          <button
+            onClick={() => { localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY); setSudahLogin(false); }}
             className="px-3 py-1.5 bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-400 border border-slate-700 hover:border-rose-900 rounded-xl text-xs font-bold transition"
           >
             {teks.logout}
@@ -647,14 +634,14 @@ export default function App() {
               { label: teks.formPlaceIp, key: 'ip' },
               { label: teks.formPlaceMac, key: 'mac' }
             ].map((kolom) => (
-              <input 
+              <input
                 key={kolom.key}
-                type="text" 
-                value={dataForm[kolom.key]} 
+                type="text"
+                value={dataForm[kolom.key]}
                 disabled={idSedangDiedit && kolom.key === 'serial'}
-                onChange={(e) => setDataForm({...dataForm, [kolom.key]: e.target.value})} 
-                placeholder={kolom.label} 
-                className={`bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition ${idSedangDiedit && kolom.key === 'serial' ? 'opacity-50 cursor-not-allowed' : ''}`} 
+                onChange={(e) => setDataForm({ ...dataForm, [kolom.key]: e.target.value })}
+                placeholder={kolom.label}
+                className={`bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition ${idSedangDiedit && kolom.key === 'serial' ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
             ))}
           </div>
@@ -672,9 +659,9 @@ export default function App() {
         <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative w-full md:flex-1">
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
-            <input 
-              type="text" 
-              placeholder={teks.searchPlace} 
+            <input
+              type="text"
+              placeholder={teks.searchPlace}
               value={kataKunciCari}
               onChange={(e) => setKataKunciCari(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-2xl text-xs text-white focus:outline-none font-medium"
@@ -700,13 +687,12 @@ export default function App() {
             </div>
           ) : (
             daftarHasilPencarian.map((perangkat) => (
-              <div 
-                key={perangkat.serial} 
-                className={`bg-slate-900 border rounded-2xl p-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 transition-all ${
-                  perangkat.terbacaOtomatisBelumDisimpan 
-                    ? 'border-cyan-500 bg-gradient-to-r from-cyan-950/20 to-transparent' 
-                    : 'border-slate-800/80'
-                }`}
+              <div
+                key={perangkat.serial}
+                className={`bg-slate-900 border rounded-2xl p-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 transition-all ${perangkat.terbacaOtomatisBelumDisimpan
+                  ? 'border-cyan-500 bg-gradient-to-r from-cyan-950/20 to-transparent'
+                  : 'border-slate-800/80'
+                  }`}
               >
                 <div className="flex items-start gap-3 flex-1 w-full">
                   <div className={`p-3 rounded-xl border ${perangkat.isOnline ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-600'}`}>
@@ -715,17 +701,16 @@ export default function App() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-bold text-sm text-white tracking-tight">{perangkat.name}</h4>
-                      <span className={`text-[9px] font-black font-mono px-2 py-0.5 rounded-full border tracking-wider ${
-                        perangkat.isOnline 
-                          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
-                          : 'bg-slate-950 border-slate-800 text-slate-500'
-                      }`}>
+                      <span className={`text-[9px] font-black font-mono px-2 py-0.5 rounded-full border tracking-wider ${perangkat.isOnline
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                        : 'bg-slate-950 border-slate-800 text-slate-500'
+                        }`}>
                         {perangkat.isOnline ? teks.tagOnline : teks.tagOffline}
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 font-mono mt-1">Serial: {perangkat.serial}</p>
                     <p className="text-xs text-slate-500 mt-0.5">WiFi: {perangkat.wifi} | IP: {perangkat.ip}</p>
-                    
+
                     {perangkat.isOnline && (
                       <div className="mt-2 max-w-xs">
                         <input
@@ -744,24 +729,21 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2 w-full lg:w-auto justify-end relative">
-                  {/* Tombol Utama Kontrol AHK Engine */}
-                  <button 
+                  <button
                     onClick={() => ubahStatusAhk(perangkat)}
                     disabled={!perangkat.isOnline}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                      !perangkat.isOnline 
-                        ? 'bg-slate-950 border border-slate-800 text-slate-600 cursor-not-allowed' 
-                        : perangkat.ahkEnabled 
-                          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
-                          : 'bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
-                    }`}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${!perangkat.isOnline
+                      ? 'bg-slate-950 border border-slate-800 text-slate-600 cursor-not-allowed'
+                      : perangkat.ahkEnabled
+                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                        : 'bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
+                      }`}
                   >
                     {!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}
                   </button>
 
-                  {/* IMPLEMENTASI BUTTON TITIK TIGA YANG ELEGAN & RAPI */}
                   <div className="relative">
-                    <button 
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setActiveDropdown(activeDropdown === perangkat.serial ? null : perangkat.serial);
@@ -772,11 +754,9 @@ export default function App() {
                       <MoreVertical className="w-4 h-4" />
                     </button>
 
-                    {/* Dropdown Menu Box */}
                     {activeDropdown === perangkat.serial && (
                       <div className="absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100">
-                        {/* Opsi 1: Simpan atau Override Baseline */}
-                        <button 
+                        <button
                           onClick={() => {
                             simpanKeDatabasePusat(perangkat);
                             setActiveDropdown(null);
@@ -787,8 +767,7 @@ export default function App() {
                           {teks.formBtnSave}
                         </button>
 
-                        {/* Opsi 2: Ubah Data Manual */}
-                        <button 
+                        <button
                           onClick={() => {
                             setIdSedangDiedit(perangkat.serial);
                             setDataForm({
@@ -808,8 +787,7 @@ export default function App() {
                           {teks.btnEdit}
                         </button>
 
-                        {/* Opsi 3: Hapus Data Permanen */}
-                        <button 
+                        <button
                           onClick={() => {
                             hapusPerangkatPermanen(perangkat.serial);
                             setActiveDropdown(null);
@@ -829,9 +807,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* ==================================================================== */}
-      {/* CUSTOM POP-UP CONFIRMATION MODAL (TEMA DASHBOARD CYBERPUNK SLATE)   */}
-      {/* ==================================================================== */}
       {modalConfig.isOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-in zoom-in-95 duration-150">
@@ -847,13 +822,13 @@ export default function App() {
               {modalConfig.message}
             </p>
             <div className="flex gap-2 pt-2">
-              <button 
+              <button
                 onClick={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
                 className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-xl text-xs transition"
               >
                 {teks.modalCancel}
               </button>
-              <button 
+              <button
                 onClick={modalConfig.onConfirm}
                 className={`flex-1 font-bold py-2 rounded-xl text-xs text-white transition ${modalConfig.isDanger ? 'bg-rose-600 hover:bg-rose-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}
               >
@@ -864,7 +839,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Notifikasi Toast */}
       {notifikasi && (
         <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500 animate-bounce">
           {notifikasi}
