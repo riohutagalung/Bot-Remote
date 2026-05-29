@@ -30,7 +30,7 @@ const KAMUS_BAHASA = {
     authSub: "Masukkan kunci akses untuk masuk",
     authPlace: "Kata Sandi",
     authBtn: "Masuk Dashboard",
-    subTitle: "Manajemen Jaringan Laptop Target & Kontrol Engine",
+    subTitle: "Kontrol semuanya dalam satu dashboard! Sor kaleeeeee kan?",
     statusWsActive: "KONEKSI AKTIF",
     statusWsClose: "TERPUTUS",
     logout: "Keluar",
@@ -72,8 +72,8 @@ const KAMUS_BAHASA = {
     modalDangerTitle: "⚠️ TINDAKAN BERBAHAYA",
     modalCancel: "Batal",
     modalContinue: "Lanjutkan",
-    confirmDelete1: "Hapus permanen laptop ini dari database pusat?",
-    confirmDelete2: "APAKAH KAU BETUL-BETUL YAKIN? Tindakan ini akan menghapus data secara permanen dari cloud backend!"
+    confirmDelete1: "Hapus permanen data laptop ini dari database pusat?",
+    confirmDelete2: "Yakin Ko? kehapus nanti permanen dari cloud backend!"
   },
   EN: {
     loading: "BOOTING MASTER SYSTEM...",
@@ -483,11 +483,23 @@ export default function App() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute top-4 right-4 z-50">
           {/* Tombol Bendera Minimalis di Halaman Login */}
-<button 
-  onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
-  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold hover:bg-slate-800 transition shadow-md"
+<button
+  onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
+  className="flex items-center gap-1.5 px-3 py-1.5
+             bg-slate-800 hover:bg-slate-700 border border-slate-700
+             text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
 >
-  {bahasa === 'ID' ? 'ID 🇮🇩' : 'ENG 🇺🇸'}
+  {bahasa === "ID" ? (
+    <>
+      <span className="text-base">🇮🇩</span>
+      <span>ID</span>
+    </>
+  ) : (
+    <>
+      <span className="text-base">🇺🇸</span>
+      <span>ENG</span>
+    </>
+  )}
 </button>
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_60%)]" />
@@ -535,11 +547,23 @@ export default function App() {
         
         <div className="flex items-center gap-3 flex-wrap justify-end">
           {/* Tombol Bendera Minimalis di Header Dashboard */}
-<button 
-  onClick={() => setBahasa(bahasa === 'ID' ? 'EN' : 'ID')} 
-  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
+<button
+  onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
+  className="flex items-center gap-1.5 px-3 py-1.5
+             bg-slate-800 hover:bg-slate-700 border border-slate-700
+             text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
 >
-  {bahasa === 'ID' ? 'ID 🇮🇩' : 'ENG 🇺🇸'}
+  {bahasa === "ID" ? (
+    <>
+      <span className="text-base">🇮🇩</span>
+      <span>ID</span>
+    </>
+  ) : (
+    <>
+      <span className="text-base">🇺🇸</span>
+      <span>ENG</span>
+    </>
+  )}
 </button>
           
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold font-mono border ${wsTerhubung ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'}`}>
