@@ -24,41 +24,24 @@ const URL_HTTP = "https://bot-remote-production.up.railway.app";
 const URL_WS = "wss://bot-remote-production.up.railway.app";
 
 // ====================================================================
-// LOGO RH PROPER (INLINE SVG - ANTI 404 & BERGAYA CYBERPUNK TECH)
+// LOGO PRIBADI MENGGUNAKAN HOSTING GOOGLE DRIVE DIRECT LINK
 // ====================================================================
-const LogoRH = ({ className = "w-8 h-8" }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    viewBox="0 0 100 100" 
-    className={className} 
-    fill="none"
-  >
-    <defs>
-      <linearGradient id="rhGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#6366f1" /* Indigo */ />
-        <stop offset="100%" stopColor="#10b981" /* Emerald */ />
-      </linearGradient>
-    </defs>
-    {/* Monogram Huruf R dan H Terintegrasi Jalur Jaringan */}
-    <path 
-      d="M22 25 V75 M22 50 H48 M48 25 V75 M48 42 C60 42, 66 32, 76 32 C86 32, 88 42, 88 52 V75" 
-      stroke="url(#rhGradient)" 
-      strokeWidth="7" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
+const LogoRH = ({ className = "w-8 h-8" }) => {
+  // ID Gambar dari link Google Drive Anda
+  const idGambarDrive = "1u8FZ2SMV2oqVXZ2No8A7PiAHNWPhLMdt"; 
+  
+  return (
+    <img 
+      src={`https://docs.google.com/uc?export=view&id=${idGambarDrive}`}
+      alt="RH Logo" 
+      className={`${className} object-contain`} 
+      onError={(e) => {
+        // Fallback otomatis berupa logo bendera jika link Drive bermasalah/belum public
+        e.target.src = "https://flagcdn.com/us.svg"; 
+      }}
     />
-    {/* Sinyal Kontrol / Node Pemancar */}
-    <circle cx="76" cy="32" r="3.5" fill="#10b981" />
-    <circle cx="88" cy="52" r="3.5" fill="#10b981" />
-    <path 
-      d="M65 18 C75 18, 85 28, 85 38" 
-      stroke="#6366f1" 
-      strokeWidth="3" 
-      strokeLinecap="round" 
-      strokeDasharray="2 3"
-    />
-  </svg>
-);
+  );
+};
 
 const KAMUS_BAHASA = {
   ID: {
@@ -418,9 +401,7 @@ export default function App() {
 
   // Mekanisme Double Confirmation Menggunakan Custom Theme Pop-up Modal 
   const hapusPerangkatPermanen = (serialTarget) => {
-    // Konfirmasi Tingkat Pertama (Custom Modal UI)
     triggerCustomConfirm(teks.modalConfirmTitle, teks.confirmDelete1, false, () => {
-      // Konfirmasi Tingkat Kedua (Custom Modal UI - Alur Bahaya)
       setTimeout(() => {
         triggerCustomConfirm(teks.modalDangerTitle, teks.confirmDelete2, true, async () => {
           try {
@@ -516,36 +497,24 @@ export default function App() {
   }
 
   // ====================================================================
-  // COMPONENT TAMPILAN HALAMAN LOGIN (SUDAH DI-FIX TOTAL STRUKTURNYA)
+  // COMPONENT TAMPILAN HALAMAN LOGIN
   // ====================================================================
   if (!sudahLogin) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute top-4 right-4 z-50">
-          {/* Tombol Bendera Minimalis di Halaman Login */}
           <button
             onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
-            className="flex items-center gap-1.5 px-3 py-1.5
-             bg-slate-900 border border-slate-800 rounded-xl
-             text-xs font-bold text-indigo-400 hover:bg-slate-800
-             transition shadow-md"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-indigo-400 hover:bg-slate-800 transition shadow-md"
           >
             {bahasa === "ID" ? (
               <>
-                <img
-                  src="https://flagcdn.com/id.svg"
-                  alt="Indonesia"
-                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-                />
+                <img src="https://flagcdn.com/id.svg" alt="Indonesia" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
                 <span className="uppercase">ID</span>
               </>
             ) : (
               <>
-                <img
-                  src="https://flagcdn.com/us.svg"
-                  alt="English"
-                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-                />
+                <img src="https://flagcdn.com/us.svg" alt="English" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
                 <span className="uppercase">ENG</span>
               </>
             )}
@@ -556,11 +525,9 @@ export default function App() {
         
         <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
           <div className="text-center space-y-4">
-            {/* Box Wadah Logo RH Proper */}
             <div className="w-16 h-16 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner p-2.5">
               <LogoRH className="w-full h-full text-indigo-400" />
             </div>
-            {/* Judul & Teks yang Terpisah dari Box Logo */}
             <div className="space-y-1">
               <h1 className="text-xl font-black text-white tracking-tight uppercase">{teks.authTitle}</h1>
               <p className="text-xs text-slate-400">{teks.authSub}</p>
@@ -595,7 +562,6 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
       <header className="bg-slate-900/80 border-b border-slate-800/80 sticky top-0 backdrop-blur-md z-40 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
-          {/* Logo Baru di Header Dashboard */}
           <div className="w-10 h-10 bg-slate-950 rounded-xl flex items-center justify-center border border-slate-800 p-1.5 shadow-md">
             <LogoRH className="w-full h-full" />
           </div>
@@ -608,29 +574,18 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          {/* Tombol Bendera Minimalis di Header Dashboard */}
           <button
             onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
-            className="flex items-center gap-1.5 px-3 py-1.5
-             bg-slate-800 hover:bg-slate-700 border border-slate-700
-             text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl text-indigo-400 transition shadow-sm"
           >
             {bahasa === "ID" ? (
               <>
-                <img
-                  src="https://flagcdn.com/id.svg"
-                  alt="Indonesia"
-                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-                />
+                <img src="https://flagcdn.com/id.svg" alt="Indonesia" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
                 <span className="uppercase">ID</span>
               </>
             ) : (
               <>
-                <img
-                  src="https://flagcdn.com/us.svg"
-                  alt="English"
-                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-                />
+                <img src="https://flagcdn.com/us.svg" alt="English" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
                 <span className="uppercase">ENG</span>
               </>
             )}
@@ -786,14 +741,13 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2 w-full lg:w-auto justify-end relative">
-                  {/* Tombol Utama Kontrol AHK Engine */}
                   <button
                     onClick={() => ubahStatusAhk(perangkat)}
                     disabled={!perangkat.isOnline}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${!perangkat.isOnline
                       ? 'bg-slate-950 border border-slate-800 text-slate-600 cursor-not-allowed'
                       : perangkat.ahkEnabled
-                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
                         : 'bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
                       }`}
                   >
@@ -812,10 +766,8 @@ export default function App() {
                       <MoreVertical className="w-4 h-4" />
                     </button>
 
-                    {/* Dropdown Menu Box */}
                     {activeDropdown === perangkat.serial && (
-                      <div className="absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100">
-                        {/* Opsi 1: Simpan atau Override Baseline */}
+                      <div className="absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden">
                         <button
                           onClick={() => {
                             simpanKeDatabasePusat(perangkat);
@@ -827,7 +779,6 @@ export default function App() {
                           {teks.formBtnSave}
                         </button>
 
-                        {/* Opsi 2: Ubah Data Manual */}
                         <button
                           onClick={() => {
                             setIdSedangDiedit(perangkat.serial);
@@ -848,7 +799,6 @@ export default function App() {
                           {teks.btnEdit}
                         </button>
 
-                        {/* Opsi 3: Hapus Data Permanen */}
                         <button
                           onClick={() => {
                             hapusPerangkatPermanen(perangkat.serial);
@@ -869,12 +819,9 @@ export default function App() {
         </div>
       </main>
 
-      {/* ==================================================================== */}
-      {/* CUSTOM POP-UP CONFIRMATION MODAL (TEMA DASHBOARD CYBERPUNK SLATE)   */}
-      {/* ==================================================================== */}
       {modalConfig.isOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-4">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-xl ${modalConfig.isDanger ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}`}>
                 <AlertCircle className="w-5 h-5" />
@@ -904,7 +851,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast Notification */}
       {notifikasi && (
         <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500 animate-bounce">
           {notifikasi}
