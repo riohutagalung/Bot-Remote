@@ -7,13 +7,10 @@ import {
   Search,
   Laptop,
   Plus,
-  Sliders,
-  ShieldCheck,
   Radio,
   CheckCircle,
   XCircle,
   Activity,
-  Languages,
   MoreVertical,
   Save,
   Edit2
@@ -22,6 +19,43 @@ import {
 const SESS_KEY = 'rh-auth-session';
 const URL_HTTP = "https://bot-remote-production.up.railway.app";
 const URL_WS = "wss://bot-remote-production.up.railway.app";
+
+// ====================================================================
+// LOGO RH PROPER (INLINE SVG - ANTI 404 & BERGAYA CYBERPUNK TECH)
+// ====================================================================
+const LogoRH = ({ className = "w-8 h-8" }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 100 100" 
+    className={className} 
+    fill="none"
+  >
+    <defs>
+      <linearGradient id="rhGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#6366f1" /* Indigo */ />
+        <stop offset="100%" stopColor="#10b981" /* Emerald */ />
+      </linearGradient>
+    </defs>
+    {/* Monogram Huruf R dan H Terintegrasi Jalur Jaringan */}
+    <path 
+      d="M22 25 V75 M22 50 H48 M48 25 V75 M48 42 C60 42, 66 32, 76 32 C86 32, 88 42, 88 52 V75" 
+      stroke="url(#rhGradient)" 
+      strokeWidth="7" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+    />
+    {/* Sinyal Kontrol / Node Pemancar */}
+    <circle cx="76" cy="32" r="3.5" fill="#10b981" />
+    <circle cx="88" cy="52" r="3.5" fill="#10b981" />
+    <path 
+      d="M65 18 C75 18, 85 28, 85 38" 
+      stroke="#6366f1" 
+      strokeWidth="3" 
+      strokeLinecap="round" 
+      strokeDasharray="2 3"
+    />
+  </svg>
+);
 
 const KAMUS_BAHASA = {
   ID: {
@@ -471,6 +505,9 @@ export default function App() {
     );
   }
 
+  // ====================================================================
+  // 1. COMPONENT TAMPILAN HALAMAN LOGIN (SUDAH DI-FIX TOTAL STRUKTURNYA)
+  // ====================================================================
   if (!sudahLogin) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
@@ -481,39 +518,34 @@ export default function App() {
           >
             {bahasa === "ID" ? (
               <>
-                <img
-                  src="https://flagcdn.com/id.svg"
-                  alt="Indonesia"
-                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-                />
+                <img src="https://flagcdn.com/id.svg" alt="Indonesia" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
                 <span className="uppercase">ID</span>
               </>
             ) : (
               <>
-                <img
-                  src="https://flagcdn.com/us.svg"
-                  alt="English"
-                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-                />
+                <img src="https://flagcdn.com/us.svg" alt="English" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
                 <span className="uppercase">ENG</span>
               </>
             )}
           </button>
         </div>
+        
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_60%)]" />
+        
         <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
           <div className="text-center space-y-4">
-            <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner overflow-hidden">
-              <img
-                src="/logo-rh.svg"
-                alt="RH Logo"
-                className="w-8 h-8 object-contain"
-              />
+            {/* Box Wadah Logo RH Proper */}
+            <div className="w-16 h-16 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner p-2.5">
+              <LogoRH className="w-full h-full text-indigo-400" />
             </div>
+            {/* Judul & Teks yang Terpisah dari Box Logo */}
             <div className="space-y-1">
               <h1 className="text-xl font-black text-white tracking-tight uppercase">{teks.authTitle}</h1>
               <p className="text-xs text-slate-400">{teks.authSub}</p>
             </div>
+          </div>
+
+          <div className="space-y-3">
             <input
               type="password"
               value={inputPassword}
@@ -534,16 +566,16 @@ export default function App() {
     );
   }
 
+  // ====================================================================
+  // 2. COMPONENT UTAMA HALAMAN DASHBOARD (FIXED BRACKET & NEW LOGO HEADER)
+  // ====================================================================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
       <header className="bg-slate-900/80 border-b border-slate-800/80 sticky top-0 backdrop-blur-md z-40 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md overflow-hidden">
-            <img
-              src="/logo-rh.svg"
-              alt="RH Logo"
-              className="w-6 h-6 object-contain"
-            />
+          {/* Logo Baru di Bagian Header Dashboard */}
+          <div className="w-10 h-10 bg-slate-950 rounded-xl flex items-center justify-center border border-slate-800 p-1.5 shadow-md">
+            <LogoRH className="w-full h-full" />
           </div>
           <div>
             <h1 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
@@ -560,20 +592,12 @@ export default function App() {
           >
             {bahasa === "ID" ? (
               <>
-                <img
-                  src="https://flagcdn.com/id.svg"
-                  alt="Indonesia"
-                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-                />
+                <img src="https://flagcdn.com/id.svg" alt="Indonesia" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
                 <span className="uppercase">ID</span>
               </>
             ) : (
               <>
-                <img
-                  src="https://flagcdn.com/us.svg"
-                  alt="English"
-                  className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block"
-                />
+                <img src="https://flagcdn.com/us.svg" alt="English" className="w-5 h-3 object-cover rounded-sm shadow-sm inline-block" />
                 <span className="uppercase">ENG</span>
               </>
             )}
@@ -628,7 +652,7 @@ export default function App() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
               { label: teks.formPlaceName, key: 'name' },
-              { label: teks.formPlaceSerial, key: 'serial' },
+              { label: teks.formPlaceVisual, key: 'serial' },
               { label: teks.formPlaceModel, key: 'model' },
               { label: teks.formPlaceWifi, key: 'wifi' },
               { label: teks.formPlaceIp, key: 'ip' },
@@ -637,10 +661,10 @@ export default function App() {
               <input
                 key={kolom.key}
                 type="text"
-                value={dataForm[kolom.key]}
+                value={dataForm[kolom.key] || ''}
                 disabled={idSedangDiedit && kolom.key === 'serial'}
                 onChange={(e) => setDataForm({ ...dataForm, [kolom.key]: e.target.value })}
-                placeholder={kolom.label}
+                placeholder={kolom.key === 'serial' ? teks.formPlaceSerial : kolom.label}
                 className={`bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition ${idSedangDiedit && kolom.key === 'serial' ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
             ))}
@@ -655,7 +679,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Search and Action Schema Tools */}
+        {/* Search and Action Tools */}
         <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative w-full md:flex-1">
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
@@ -692,7 +716,7 @@ export default function App() {
                 className={`bg-slate-900 border rounded-2xl p-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 transition-all ${perangkat.terbacaOtomatisBelumDisimpan
                   ? 'border-cyan-500 bg-gradient-to-r from-cyan-950/20 to-transparent'
                   : 'border-slate-800/80'
-                  }`}
+                }`}
               >
                 <div className="flex items-start gap-3 flex-1 w-full">
                   <div className={`p-3 rounded-xl border ${perangkat.isOnline ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-600'}`}>
@@ -704,7 +728,7 @@ export default function App() {
                       <span className={`text-[9px] font-black font-mono px-2 py-0.5 rounded-full border tracking-wider ${perangkat.isOnline
                         ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                         : 'bg-slate-950 border-slate-800 text-slate-500'
-                        }`}>
+                      }`}>
                         {perangkat.isOnline ? teks.tagOnline : teks.tagOffline}
                       </span>
                     </div>
@@ -737,7 +761,7 @@ export default function App() {
                       : perangkat.ahkEnabled
                         ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
                         : 'bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
-                      }`}
+                    }`}
                   >
                     {!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}
                   </button>
@@ -755,7 +779,7 @@ export default function App() {
                     </button>
 
                     {activeDropdown === perangkat.serial && (
-                      <div className="absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100">
+                      <div className="absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden">
                         <button
                           onClick={() => {
                             simpanKeDatabasePusat(perangkat);
@@ -807,9 +831,10 @@ export default function App() {
         </div>
       </main>
 
+      {/* Confirmation Modal UI */}
       {modalConfig.isOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-xl ${modalConfig.isDanger ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}`}>
                 <AlertCircle className="w-5 h-5" />
@@ -839,8 +864,9 @@ export default function App() {
         </div>
       )}
 
+      {/* Toast Notification */}
       {notifikasi && (
-        <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500 animate-bounce">
+        <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500">
           {notifikasi}
         </div>
       )}
