@@ -24,7 +24,7 @@ const URL_HTTP = "https://bot-remote-production.up.railway.app";
 const URL_WS = "wss://bot-remote-production.up.railway.app";
 
 // ====================================================================
-// LOGO RH (MENGGUNAKAN DIRECT LINK GAMBAR GOOGLE DRIVE)
+// LOGO RH (MENGGUNAKAN DIRECT LINK GAMBAR GOOGLE DRIVE - PADAT & FULL)
 // ====================================================================
 const URL_LOGO_DRIVE = "https://lh3.googleusercontent.com/d/1u8FZ2SMV2oqVXZ2No8A7PiAHNWPhLMdt";
 
@@ -32,7 +32,7 @@ const LogoRH = ({ className = "w-8 h-8" }) => (
   <img 
     src={URL_LOGO_DRIVE} 
     alt="RH Logo" 
-    className={`${className} object-contain`}
+    className={`${className} object-cover scale-110 transform transition-transform`}
     onError={(e) => {
       console.error("Gagal memuat logo dari Google Drive.");
     }}
@@ -62,7 +62,6 @@ const KAMUS_BAHASA = {
     formPlaceWifi: "Nama WiFi Target",
     formPlaceIp: "Alamat IP Lokal",
     formPlaceMac: "MAC Address",
-    formPlaceScript: "Nama Script AHK (Opsional)",
     formPlaceScript: "Nama Script AHK (Opsional)",
     formBtnSave: "Simpan Permanen",
     formBtnCancel: "Batal",
@@ -146,7 +145,6 @@ const KAMUS_BAHASA = {
 };
 
 export default function App() {
-  // Mengunci default bahasa ke English (EN)
   const [bahasa, setBahasa] = useState('EN');
   const teks = KAMUS_BAHASA[bahasa];
 
@@ -164,7 +162,6 @@ export default function App() {
   const [namaScriptInput, setNamaScriptInput] = useState({});
   const [activeDropdown, setActiveDropdown] = useState(null);
 
-  // State untuk kontrol Custom Modal Bertema khusus
   const [modalConfig, setModalConfig] = useState({
     isOpen: false,
     title: '',
@@ -185,7 +182,6 @@ export default function App() {
     setCekSesiSelesai(true);
   }, []);
 
-  // Menutup dropdown menu jika klik di luar area komponen
   useEffect(() => {
     const closeAllDropdowns = () => setActiveDropdown(null);
     window.addEventListener('click', closeAllDropdowns);
@@ -258,7 +254,6 @@ export default function App() {
     setTimeout(() => setNotifikasi(null), 3000);
   };
 
-  // Helper Custom Pop-up Modal Bertema Pengganti window.confirm bawaan browser
   const triggerCustomConfirm = (title, message, isDanger, onConfirmBlock) => {
     setModalConfig({
       isOpen: true,
@@ -396,11 +391,8 @@ export default function App() {
     }
   };
 
-  // Mekanisme Double Confirmation Menggunakan Custom Theme Pop-up Modal 
   const hapusPerangkatPermanen = (serialTarget) => {
-    // Konfirmasi Tingkat Pertama (Custom Modal UI)
     triggerCustomConfirm(teks.modalConfirmTitle, teks.confirmDelete1, false, () => {
-      // Konfirmasi Tingkat Kedua (Custom Modal UI - Alur Bahaya)
       setTimeout(() => {
         triggerCustomConfirm(teks.modalDangerTitle, teks.confirmDelete2, true, async () => {
           try {
@@ -495,14 +487,10 @@ export default function App() {
     );
   }
 
-  // ====================================================================
-  // COMPONENT TAMPILAN HALAMAN LOGIN
-  // ====================================================================
   if (!sudahLogin) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute top-4 right-4 z-50">
-          {/* Tombol Bendera Minimalis di Halaman Login */}
           <button
             onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
             className="flex items-center gap-1.5 px-3 py-1.5
@@ -536,11 +524,10 @@ export default function App() {
         
         <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md space-y-6 shadow-2xl relative z-10 backdrop-blur-sm">
           <div className="text-center space-y-4">
-            {/* Box Wadah Logo RH */}
-            <div className="w-16 h-16 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner p-2.5">
-              <LogoRH className="w-full h-full text-indigo-400" />
+            {/* Box Wadah Logo RH yang dibuat overflow-hidden agar terpotong rapi */}
+            <div className="w-16 h-16 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20 shadow-inner overflow-hidden">
+              <LogoRH className="w-full h-full" />
             </div>
-            {/* Judul & Teks yang Terpisah dari Box Logo */}
             <div className="space-y-1">
               <h1 className="text-xl font-black text-white tracking-tight uppercase">{teks.authTitle}</h1>
               <p className="text-xs text-slate-400">{teks.authSub}</p>
@@ -568,15 +555,12 @@ export default function App() {
     );
   }
 
-  // ====================================================================
-  // COMPONENT UTAMA HALAMAN DASHBOARD
-  // ====================================================================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
       <header className="bg-slate-900/80 border-b border-slate-800/80 sticky top-0 backdrop-blur-md z-40 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
-          {/* Logo Baru di Header Dashboard */}
-          <div className="w-10 h-10 bg-slate-950 rounded-xl flex items-center justify-center border border-slate-800 p-1.5 shadow-md">
+          {/* Container logo di header yang dibuat overflow-hidden agar memenuhi sudut */}
+          <div className="w-10 h-10 bg-slate-950 rounded-xl flex items-center justify-center border border-slate-800 shadow-md overflow-hidden">
             <LogoRH className="w-full h-full" />
           </div>
           <div>
@@ -588,7 +572,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          {/* Tombol Bendera Minimalis di Header Dashboard */}
           <button
             onClick={() => setBahasa(bahasa === "ID" ? "EN" : "ID")}
             className="flex items-center gap-1.5 px-3 py-1.5
@@ -631,7 +614,6 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        {/* Statistik Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl relative overflow-hidden">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{teks.statDb}</p>
@@ -657,7 +639,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Input Form Box */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
           <h2 className="text-xs font-black uppercase text-slate-300 tracking-widest flex items-center gap-2">
             <Plus className="w-4 h-4 text-indigo-500" /> {idSedangDiedit ? teks.formTitleEdit : teks.formTitleAdd}
@@ -692,7 +673,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Search and Action Tools */}
         <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative w-full md:flex-1">
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
@@ -715,7 +695,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Node Grid Layout */}
         <div className="space-y-3">
           {daftarHasilPencarian.length === 0 ? (
             <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl text-center py-12 text-slate-500 text-xs font-mono">
@@ -766,7 +745,6 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2 w-full lg:w-auto justify-end relative">
-                  {/* Tombol Utama Kontrol AHK Engine */}
                   <button
                     onClick={() => ubahStatusAhk(perangkat)}
                     disabled={!perangkat.isOnline}
@@ -792,10 +770,8 @@ export default function App() {
                       <MoreVertical className="w-4 h-4" />
                     </button>
 
-                    {/* Dropdown Menu Box */}
                     {activeDropdown === perangkat.serial && (
                       <div className="absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100">
-                        {/* Opsi 1: Simpan atau Override Baseline */}
                         <button
                           onClick={() => {
                             simpanKeDatabasePusat(perangkat);
@@ -807,7 +783,6 @@ export default function App() {
                           {teks.formBtnSave}
                         </button>
 
-                        {/* Opsi 2: Ubah Data Manual */}
                         <button
                           onClick={() => {
                             setIdSedangDiedit(perangkat.serial);
@@ -828,7 +803,6 @@ export default function App() {
                           {teks.btnEdit}
                         </button>
 
-                        {/* Opsi 3: Hapus Data Permanen */}
                         <button
                           onClick={() => {
                             hapusPerangkatPermanen(perangkat.serial);
@@ -849,9 +823,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* ==================================================================== */}
-      {/* CUSTOM POP-UP CONFIRMATION MODAL                                    */}
-      {/* ==================================================================== */}
       {modalConfig.isOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-in zoom-in-95 duration-150">
@@ -884,7 +855,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast Notification */}
       {notifikasi && (
         <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-2xl z-50 border border-indigo-500 animate-bounce">
           {notifikasi}
