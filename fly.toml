@@ -1,0 +1,33 @@
+app = "bot-remote"
+primary_region = "sin" # Singapore — paling dekat dari Indonesia
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+
+[[services]]
+  internal_port = 3001
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[[services]]
+  internal_port = 3002
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 3002
+    handlers = ["tls"]
