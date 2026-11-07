@@ -16,3 +16,10 @@ out
 .cache
 .vercel
 .env*.local
+
+cloud_devices.json
+__pycache__/
+*.pyc
+
+.venv/
+.npm-cache/

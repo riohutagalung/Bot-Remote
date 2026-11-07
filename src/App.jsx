@@ -1,3 +1,4 @@
+import DesktopPanel from './DesktopPanel';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Download,
@@ -20,8 +21,9 @@ import {
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
-const URL_HTTP = "https://bot-remote-production.up.railway.app";
-const URL_WS = "wss://bot-remote-production.up.railway.app";
+const URL_HTTP = import.meta.env.VITE_API_URL || window.location.origin;
+const authHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY) || ''}` });
+const URL_WS = URL_HTTP.replace(/^http/, "ws");
 
 // ====================================================================
 // LOGO RH (MENGGUNAKAN DIRECT LINK GAMBAR GOOGLE DRIVE - PADAT & FULL)
@@ -145,7 +147,8 @@ const KAMUS_BAHASA = {
 };
 
 export default function App() {
-  const [bahasa, setBahasa] = useState('EN');
+  const [desktopDevice, setDesktopDevice] = useState(null);
+  const [bahasa, setBahasa] = useState('ID');
   const teks = KAMUS_BAHASA[bahasa];
 
   const [sudahLogin, setSudahLogin] = useState(false);
@@ -190,7 +193,10 @@ export default function App() {
 
   const muatDataDariDatabase = async () => {
     try {
-      const respon = await fetch(`${URL_HTTP}/api/devices`);
+      const respon = await fetch(`${URL_HTTP}/api/devices`, {headers: authHeaders()});
+      if (respon.status === 401) {
+        localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY); setSudahLogin(false); return;
+      }
       if (respon.ok) {
         const hasil = await respon.json();
         setPerangkatDatabase(Array.isArray(hasil) ? hasil : hasil.devices || []);
@@ -212,11 +218,13 @@ export default function App() {
 
     let socket;
     let timAsinkron;
+    let disposed = false;
 
     const hubungkanKoneksiSinyal = () => {
       socket = new WebSocket(URL_WS);
 
       socket.onopen = () => {
+        socket.send(JSON.stringify({type: "dashboard_auth", token: localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY)}));
         setWsTerhubung(true);
         tampilkanNotifikasi(teks.notifWs);
       };
@@ -234,7 +242,7 @@ export default function App() {
 
       socket.onclose = () => {
         setWsTerhubung(false);
-        timAsinkron = setTimeout(hubungkanKoneksiSinyal, 5000);
+        if (!disposed) timAsinkron = setTimeout(hubungkanKoneksiSinyal, 5000);
       };
 
       socket.onerror = () => {
@@ -244,6 +252,7 @@ export default function App() {
 
     hubungkanKoneksiSinyal();
     return () => {
+      disposed = true;
       if (socket) socket.close();
       clearTimeout(timAsinkron);
     };
@@ -284,11 +293,12 @@ export default function App() {
       serialTerprosesDariDb.add(kunciSerial);
 
       const dataSinyalLive = petaOnline.get(kunciSerial);
-      const statusAktif = petaOnline.has(kunciSerial);
+      const statusAktif = dataSinyalLive?.status === "Online";
 
       daftarHasilGabung.push({
         ...perangkat,
         isOnline: statusAktif,
+        desktopEnabled: dataSinyalLive?.desktopEnabled === true,
         ahkEnabled: dataSinyalLive ? (dataSinyalLive.ahkEnabled || false) : (perangkat.ahkEnabled || false),
         ip: dataSinyalLive?.info?.ip || perangkat.ip || '-',
         mac: dataSinyalLive?.info?.mac || perangkat.mac || '-',
@@ -312,7 +322,7 @@ export default function App() {
           wifi: live.info?.wifi || '-',
           ip: live.info?.ip || '-',
           mac: live.info?.mac || '-',
-          isOnline: true,
+          isOnline: live.status === "Online",
           ahkEnabled: live.ahkEnabled || false,
           terbacaOtomatisBelumDisimpan: true
         });
@@ -337,7 +347,7 @@ export default function App() {
 
       const respon = await fetch(`${URL_HTTP}/api/command`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           deviceId: perangkat.serial,
           command: aksiPerintah,
@@ -366,7 +376,7 @@ export default function App() {
 
       const hasilKirim = await fetch(jalurUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           id: targetIdRoute,
           serial: payload.serial,
@@ -398,7 +408,7 @@ export default function App() {
           try {
             const hapus = await fetch(`${URL_HTTP}/api/devices/${serialTarget}`, {
               method: 'DELETE',
-              headers: { 'Content-Type': 'application/json' }
+              headers: authHeaders()
             });
             if (hapus.ok) {
               tampilkanNotifikasi(teks.notifDbDeleted);
@@ -418,7 +428,7 @@ export default function App() {
     try {
       const kirim = await fetch(`${URL_HTTP}/api/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ password: inputPassword })
       });
       const data = await kirim.json();
@@ -461,7 +471,7 @@ export default function App() {
             const targetKey = item.serial || item.id;
             await fetch(`${URL_HTTP}/api/devices/${targetKey}`, {
               method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
+              headers: authHeaders(),
               body: JSON.stringify(item)
             });
           }
@@ -605,7 +615,7 @@ export default function App() {
           </div>
 
           <button
-            onClick={() => { localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY); setSudahLogin(false); }}
+            onClick={() => { fetch(`${URL_HTTP}/api/logout`, {method: 'POST', headers: authHeaders()}); setDesktopDevice(null); localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY); setSudahLogin(false); }}
             className="px-3 py-1.5 bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-400 border border-slate-700 hover:border-rose-900 rounded-xl text-xs font-bold transition"
           >
             {teks.logout}
@@ -614,6 +624,7 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        {desktopDevice && <DesktopPanel key={desktopDevice.serial} device={desktopDevice} base={URL_HTTP} headers={authHeaders} onClose={() => setDesktopDevice(null)} /> }
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl relative overflow-hidden">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{teks.statDb}</p>
@@ -745,6 +756,7 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2 w-full lg:w-auto justify-end relative">
+                  <button className="px-4 py-2 bg-indigo-600 rounded-xl text-xs disabled:opacity-40" disabled={!perangkat.isOnline || !perangkat.desktopEnabled} onClick={() => setDesktopDevice(perangkat)}>Kontrol Laptop</button>
                   <button
                     onClick={() => ubahStatusAhk(perangkat)}
                     disabled={!perangkat.isOnline}

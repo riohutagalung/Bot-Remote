@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 
 // Konfigurasi Vite utama
 export default defineConfig({
+  server: { proxy: { '/api': 'http://localhost:8080', '/': { target: 'ws://localhost:8080', ws: true, bypass(req) { if (req.headers.upgrade !== 'websocket') return req.url; } } } },
   build: {
     rollupOptions: {
       output: {

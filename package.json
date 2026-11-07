@@ -9,7 +9,11 @@
     "start": "node server.js",
     "build": "vite build",
     "preview": "vite preview --port 8080",
-    "vercel-build": "vite build"
+    "vercel-build": "vite build",
+    "server": "node --env-file=.env server.js",
+    "agent": "node --env-file=.env client.cjs",
+    "test": "node --test tests/*.test.js",
+    "local": "node --env-file=.env local.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

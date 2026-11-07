@@ -1,33 +1,15 @@
 app = "bot-remote"
-primary_region = "sin" # Singapore — paling dekat dari Indonesia
-
+primary_region = "sin"
 [build]
   dockerfile = "Dockerfile"
-
 [env]
   NODE_ENV = "production"
-
-[[services]]
-  internal_port = 3001
-  protocol = "tcp"
-
-  [[services.ports]]
-    port = 80
-    handlers = ["http"]
-
-  [[services.ports]]
-    port = 443
-    handlers = ["tls", "http"]
-
-  [services.concurrency]
-    type = "connections"
-    hard_limit = 25
-    soft_limit = 20
-
-[[services]]
-  internal_port = 3002
-  protocol = "tcp"
-
-  [[services.ports]]
-    port = 3002
-    handlers = ["tls"]
+  HOST = "0.0.0.0"
+  PORT = "8080"
+  DATA_FILE = "/data/cloud_devices.json"
+[http_service]
+  internal_port = 8080
+  force_https = true
+[[mounts]]
+  source = "bot_remote_data"
+  destination = "/data"
