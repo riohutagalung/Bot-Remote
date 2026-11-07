@@ -1,4 +1,5 @@
 import DesktopPanel from './DesktopPanel';
+import { normalizeBackend } from './backend-url.js';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Download,
@@ -21,9 +22,9 @@ import {
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
-const URL_HTTP = localStorage.getItem('rh-backend-url') || import.meta.env.VITE_API_URL || window.location.origin;
+let URL_HTTP = localStorage.getItem('rh-backend-url') || import.meta.env.VITE_API_URL || window.location.origin;
 const authHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY) || ''}` });
-const URL_WS = URL_HTTP.replace(/^http/, "ws");
+let URL_WS = URL_HTTP.replace(/^http/, "ws");
 
 // ====================================================================
 // LOGO RH (MENGGUNAKAN DIRECT LINK GAMBAR GOOGLE DRIVE - PADAT & FULL)
@@ -430,11 +431,22 @@ export default function App() {
     if (loginPending) return;
     setLoginPending(true);
     try {
-      const kirim = await fetch(`${URL_HTTP}/api/login`, {
-        method: 'POST',
-        headers: authHeaders(),
+      const selectedBackend = normalizeBackend(backendInput);
+      if (selectedBackend !== URL_HTTP) {
+        localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY);
+      }
+      URL_HTTP = selectedBackend;
+      URL_WS = selectedBackend.replace(/^http/, 'ws');
+      localStorage.setItem('rh-backend-url', selectedBackend);
+      setBackendInput(selectedBackend);
+      setNotifikasi(null);
+      const kirim = await fetch(`${selectedBackend}/api/login`, {
+        method: 'POST', signal: AbortSignal.timeout(15000),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: inputPassword })
       });
+      if (kirim.status === 405) throw new Error('Alamat ini hanya frontend. Isi Alamat backend laptop dengan alamat tunnel HTTPS laptop.');
+      if (!kirim.headers.get('content-type')?.includes('application/json')) throw new Error(`Server mengembalikan HTTP ${kirim.status}, bukan layanan login Bot-Remote.`);
       const data = await kirim.json();
 
       if (kirim.ok && data.success) {
@@ -442,10 +454,10 @@ export default function App() {
         localStorage.setItem(SESS_KEY, data.token);
         setSudahLogin(true);
       } else {
-        tampilkanNotifikasi(data.message || 'Access Refused');
+        setNotifikasi(data.message || data.error || `Login ditolak (HTTP ${kirim.status})`);
       }
     } catch (error) {
-      tampilkanNotifikasi('Server tidak terjangkau. Periksa Alamat backend dan pastikan agent laptop aktif.');
+      setNotifikasi(error.message === 'Failed to fetch' ? 'Server tidak terjangkau. Periksa alamat backend dan pastikan laptop aktif.' : error.message);
     } finally { setLoginPending(false); }
   };
 
@@ -552,15 +564,8 @@ export default function App() {
             <label className="block text-xs text-slate-400">Alamat backend laptop
               <input type="url" aria-label="Alamat backend laptop" value={backendInput} onChange={e=>setBackendInput(e.target.value)} className="w-full mt-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white" />
             </label>
-            <button type="button" className="text-xs text-indigo-300" onClick={() => {
-              try {
-                const url = new URL(backendInput.trim());
-                if (url.username || url.password || url.pathname !== '/' || url.search || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost','127.0.0.1'].includes(url.hostname)))) throw new Error('Gunakan alamat HTTPS server, tanpa path atau password');
-                if (url.origin === window.location.origin) localStorage.removeItem('rh-backend-url'); else localStorage.setItem('rh-backend-url',url.origin);
-                localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY); window.location.reload();
-              } catch(e) {tampilkanNotifikasi(e.message);}
-            }}>Simpan alamat server</button>
-            <p className="text-xs text-slate-500 break-all">Server aktif: {URL_HTTP}</p>
+            <p className="text-xs text-slate-400">Login akan memakai alamat yang diisi di atas.</p>
+            {notifikasi && <p role="alert" className="text-sm text-rose-300">{notifikasi}</p>}
             <input
               type="password"
               value={inputPassword}
