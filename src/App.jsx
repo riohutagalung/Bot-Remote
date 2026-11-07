@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
-const URL_HTTP = import.meta.env.VITE_API_URL || window.location.origin;
+const URL_HTTP = localStorage.getItem('rh-backend-url') || import.meta.env.VITE_API_URL || window.location.origin;
 const authHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY) || ''}` });
 const URL_WS = URL_HTTP.replace(/^http/, "ws");
 
@@ -154,6 +154,8 @@ export default function App() {
   const [sudahLogin, setSudahLogin] = useState(false);
   const [cekSesiSelesai, setCekSesiSelesai] = useState(false);
   const [inputPassword, setInputPassword] = useState('');
+  const [backendInput, setBackendInput] = useState(URL_HTTP);
+  const [loginPending, setLoginPending] = useState(false);
 
   const [perangkatDatabase, setPerangkatDatabase] = useState([]);
   const [perangkatOnlineLive, setPerangkatOnlineLive] = useState([]);
@@ -425,6 +427,8 @@ export default function App() {
   };
 
   const eksekusiLoginAPI = async () => {
+    if (loginPending) return;
+    setLoginPending(true);
     try {
       const kirim = await fetch(`${URL_HTTP}/api/login`, {
         method: 'POST',
@@ -441,8 +445,8 @@ export default function App() {
         tampilkanNotifikasi(data.message || 'Access Refused');
       }
     } catch (error) {
-      tampilkanNotifikasi('Gagal terkoneksi ke server.');
-    }
+      tampilkanNotifikasi('Server tidak terjangkau. Periksa Alamat backend dan pastikan agent laptop aktif.');
+    } finally { setLoginPending(false); }
   };
 
   const lakukanEksporData = () => {
@@ -544,22 +548,33 @@ export default function App() {
             </div>
           </div>
 
-          <div className="space-y-3">
+          <form className="space-y-3" onSubmit={e => {e.preventDefault(); eksekusiLoginAPI();}}>
+            <label className="block text-xs text-slate-400">Alamat backend laptop
+              <input type="url" aria-label="Alamat backend laptop" value={backendInput} onChange={e=>setBackendInput(e.target.value)} className="w-full mt-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white" />
+            </label>
+            <button type="button" className="text-xs text-indigo-300" onClick={() => {
+              try {
+                const url = new URL(backendInput.trim());
+                if (url.username || url.password || url.pathname !== '/' || url.search || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost','127.0.0.1'].includes(url.hostname)))) throw new Error('Gunakan alamat HTTPS server, tanpa path atau password');
+                if (url.origin === window.location.origin) localStorage.removeItem('rh-backend-url'); else localStorage.setItem('rh-backend-url',url.origin);
+                localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY); window.location.reload();
+              } catch(e) {tampilkanNotifikasi(e.message);}
+            }}>Simpan alamat server</button>
+            <p className="text-xs text-slate-500 break-all">Server aktif: {URL_HTTP}</p>
             <input
               type="password"
               value={inputPassword}
               onChange={(e) => setInputPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && eksekusiLoginAPI()}
               placeholder={teks.authPlace}
               className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-center text-sm focus:outline-none focus:border-indigo-500 font-mono transition"
             />
             <button
-              onClick={eksekusiLoginAPI}
+              type="submit" disabled={loginPending}
               className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-xs tracking-wider uppercase transition-all"
             >
-              {teks.authBtn}
+              {loginPending ? 'Menghubungkan…' : teks.authBtn}
             </button>
-          </div>
+          </form>
         </div>
       </div>
     );
