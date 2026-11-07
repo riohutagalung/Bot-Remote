@@ -48,12 +48,15 @@ test('authenticated dashboard → server → agent → result and disconnect', a
   const agent = new WebSocket(base.replace('http','ws')); sockets.push(agent); await once(agent,'open');
   agent.on('message', raw=>{
     const data=JSON.parse(raw);
+    if(data.type==='execute_command') agent.send(JSON.stringify({type:'command_result',requestId:data.requestId,ahkEnabled:data.action==='start_ahk'}));
     if(data.type==='desktop_command') agent.send(JSON.stringify({type:'desktop_result',requestId:data.requestId,result:{image:'data:image/jpeg;base64,TEST',width:1920,height:1080}}));
   });
   agent.send(JSON.stringify({type:'agent_auth',token:agentToken,id:'test',hostname:'Test Laptop',desktopEnabled:true}));
   const dash = new WebSocket(base.replace('http','ws')); sockets.push(dash); await once(dash,'open');
   const list = once(dash,'message'); dash.send(JSON.stringify({type:'dashboard_auth',token})); await list;
   assert.equal((await request('/api/command',{deviceId:'test',command:'shell'},token)).status,400);
+  const stopped = await (await request('/api/command',{deviceId:'test',command:'stop_ahk'},token)).json();
+  assert.deepEqual(stopped,{success:true,ahkEnabled:false});
   const result = await (await request('/api/desktop/test/action',{type:'screenshot'},token)).json();
   assert.equal(result.width,1920);
   assert.equal((await request('/api/desktop/test/action',{type:'click',x:-1,y:0},token)).status,400);

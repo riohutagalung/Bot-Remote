@@ -10,6 +10,6 @@ ENV NODE_ENV=production HOST=0.0.0.0
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
-COPY server.js desktop-server.js ./
+COPY server.js desktop-server.js ahk-server.js ./
 EXPOSE 8080
 CMD ["node", "server.js"]

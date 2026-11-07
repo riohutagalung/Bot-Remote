@@ -64,7 +64,7 @@ Jika frontend terpisah di Vercel, isi `VITE_API_URL=https://alamat-backend` saat
 
 ## AutoHotkey
 
-Install AutoHotkey pada laptop, letakkan `.ahk` di folder agent, lalu gunakan start/stop pada dashboard. Nama script dibatasi ke file `.ahk` dalam folder tersebut. Stop hanya menghentikan proses yang dimulai oleh agent saat ini; script lain tidak ikut dimatikan. Jika AutoHotkey ada di lokasi khusus, isi `AHK_EXE` dengan path executable. `client.exe` lama bukan hasil build versi ini; gunakan `npm run agent`.
+Install AutoHotkey pada laptop, letakkan `.ahk` di folder agent, lalu gunakan start/stop pada dashboard. Nama script dibatasi ke file `.ahk` dalam folder tersebut. Tombol Matikan AHK menghentikan seluruh proses AutoHotkey standar pada laptop yang dipilih, termasuk script yang dijalankan manual. Status diverifikasi dari proses Windows dan dashboard menunggu konfirmasi client. AHK yang dibungkus menjadi executable dengan nama lain belum dideteksi. Jika AHK berjalan sebagai Administrator, jalankan agent sebagai Administrator juga. Jika AutoHotkey ada di lokasi khusus, isi `AHK_EXE` dengan path executable. `client.exe` lama bukan hasil build versi ini; gunakan `npm run agent`.
 
 ## Validasi
 

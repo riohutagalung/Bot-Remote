@@ -1,4 +1,5 @@
 import express from "express";
+import {installAhkCommands} from "./ahk-server.js";
 import crypto from "node:crypto";
 import { installDesktop } from "./desktop-server.js";
 import { WebSocketServer } from "ws";
@@ -160,26 +161,7 @@ app.delete("/api/devices/:id", (req, res) => {
 // =================================================================
 // API COMMAND UNTUK START/STOP AHK DARI DASHBOARD
 // =================================================================
-app.post("/api/command", (req, res) => {
-  const { deviceId, command, scriptName = "" } = req.body || {};
-  if (!["start_ahk", "stop_ahk"].includes(command)) return res.status(400).json({ error: "Perintah tidak diizinkan" });
-  if (typeof scriptName !== "string" || (scriptName && !/^[\w .-]+\.ahk$/i.test(scriptName))) return res.status(400).json({ error: "Nama script tidak valid" });
-  if (!deviceId || !command)
-    return res.status(400).json({ error: "Data kurang" });
-
-  const cleanId = deviceId.toString().trim().toLowerCase();
-  const clientWs = deviceConnections.get(cleanId);
-
-  if (!clientWs || clientWs.readyState !== 1) {
-    return res
-      .status(404)
-      .json({ error: "Laptop sedang Offline, tidak bisa menerima perintah remote." });
-  }
-
-  // Kirim perintah ke client
-  clientWs.send(JSON.stringify({ type: "execute_command", action: command, scriptName }));
-  res.json({ success: true });
-});
+const ahkCommands = installAhkCommands(app, deviceConnections);
 
 // =================================================================
 // API PUT UNTUK SAVE / UPDATE DATA MANUAL
@@ -255,7 +237,7 @@ wss.on("connection", (ws) => {
         ws.role = "agent"; clearTimeout(authTimer);
       }
       if (ws.role !== "agent") return;
-      if (desktop.handle(ws, data)) return;
+      if (desktop.handle(ws, data) || ahkCommands.handle(ws,data)) return;
       if (data.type === "agent_auth" && currentDeviceId) return ws.close(1008, "Already registered");
 
 
@@ -279,6 +261,8 @@ wss.on("connection", (ws) => {
           ip: data.ip || "-",
           mac: data.mac || "-",
           desktopEnabled: data.desktopEnabled === true,
+          ahkKnown: data.ahkKnown === true,
+          ahkError: typeof data.ahkError === "string" ? data.ahkError.slice(0,600) : "",
           ahkEnabled:
             typeof data.ahkEnabled === "boolean"
               ? data.ahkEnabled
@@ -296,6 +280,8 @@ wss.on("connection", (ws) => {
         const cleanId = data.id.toString().trim().toLowerCase();
         if (savedDevices[cleanId]) {
           savedDevices[cleanId].ahkEnabled = !!data.ahkEnabled;
+          savedDevices[cleanId].ahkKnown = data.ahkKnown === true;
+          savedDevices[cleanId].ahkError = String(data.ahkError || "").slice(0,600);
           savedDevices[cleanId].lastSeen = new Date();
           saveCloudData(savedDevices);
           broadcastToWeb();
@@ -310,6 +296,7 @@ wss.on("connection", (ws) => {
   ws.on("close", () => {
     clearTimeout(authTimer);
     desktop.disconnect(ws);
+    ahkCommands.disconnect(ws);
     if (currentDeviceId && deviceConnections.get(currentDeviceId) === ws) {
       deviceConnections.delete(currentDeviceId);
       broadcastToWeb();

@@ -67,36 +67,52 @@ function getMAC() {
 // =============================================================
 // Kontrol AHK (tidak diubah)
 // =============================================================
+const {readAhk,stopAhk} = require('./ahk-process.cjs');
+let ahkKnown = false;
+let ahkError = '';
+let checkingAhk = false;
 let ownedAhk = null;
 async function kendalikanAhkBalikLayar(aksi, namaScript = "") {
   if (os.platform() !== "win32") return;
   if (aksi === "stop") {
-    if (ownedAhk) { ownedAhk.kill(); ownedAhk = null; }
-    await periksaStatusAhk(); return;
+    await stopAhk();
+    ownedAhk = null;
+    await periksaStatusAhk();
+    kirimTelemetri(); return;
   }
-  if (ownedAhk) return;
+  if (await readAhk()) {await periksaStatusAhk();return;}
   const file = namaScript || fs.readdirSync(CURRENT_DIR).find(f => f.toLowerCase().endsWith(".ahk"));
-  if (!file || path.basename(file) !== file || !/^[\w .-]+\.ahk$/i.test(file)) return console.error("Nama script AHK tidak valid");
+  if (!file || path.basename(file) !== file || !/^[\w .-]+\.ahk$/i.test(file)) throw new Error("Nama script AHK tidak valid");
   const full = path.join(CURRENT_DIR, file);
-  if (!fs.existsSync(full) || fs.lstatSync(full).isSymbolicLink()) return console.error("Script AHK tidak tersedia");
+  if (!fs.existsSync(full) || fs.lstatSync(full).isSymbolicLink()) throw new Error("Script AHK tidak tersedia");
   const executable = process.env.AHK_EXE || [
     "C:/Program Files/AutoHotkey/v2/AutoHotkey64.exe",
     "C:/Program Files/AutoHotkey/AutoHotkey.exe",
     "C:/Program Files/AutoHotkey/AutoHotkeyU64.exe"
   ].find(f => fs.existsSync(f));
-  if (!executable) return console.error("Set AHK_EXE ke lokasi AutoHotkey.exe");
-  ownedAhk = spawn(executable, [full], {windowsHide:true, stdio:"ignore"});
-  ownedAhk.on("error", error => { console.error(error.message); ownedAhk = null; });
-  ownedAhk.on("exit", () => { ownedAhk = null; periksaStatusAhk(); });
+  if (!executable) throw new Error("Set AHK_EXE ke lokasi AutoHotkey.exe");
+  await new Promise((resolve,reject) => {
+    ownedAhk = spawn(executable,[full],{windowsHide:true,stdio:'ignore'});
+    ownedAhk.once('spawn',resolve);
+    ownedAhk.once('error',error=>{ownedAhk=null;reject(new Error(`Gagal menjalankan AHK: ${error.code || error.message}`));});
+    ownedAhk.once('exit',()=>{ownedAhk=null;periksaStatusAhk();});
+  });
+  await new Promise(resolve=>setTimeout(resolve,500));
   await periksaStatusAhk();
+  if(!ahkKnown || !statusAhkSaatIni) throw new Error(ahkError || 'AutoHotkey keluar setelah dimulai; periksa versi dan script.');
 }
 
 // =============================================================
 // Periksa status proses AHK (tambahan: deteksi AutoHotkey Unicode)
 // =============================================================
 async function periksaStatusAhk() {
-  const active = !!ownedAhk && ownedAhk.exitCode === null;
-  if (statusAhkSaatIni !== active) { statusAhkSaatIni = active; kirimTelemetri(); }
+  if(checkingAhk) return;
+  checkingAhk=true;
+  const old=JSON.stringify([statusAhkSaatIni,ahkKnown,ahkError]);
+  try {statusAhkSaatIni=await readAhk();ahkKnown=true;ahkError='';}
+  catch(error){ahkKnown=false;ahkError=error.message;}
+  finally {checkingAhk=false;}
+  if(old!==JSON.stringify([statusAhkSaatIni,ahkKnown,ahkError])) kirimTelemetri();
 }
 
 // =============================================================
@@ -108,7 +124,7 @@ function kirimTelemetri() {
   const data = {
     type: "ahk_status",
     id: (process.env.DEVICE_ID || (info.serial === "UNKNOWN" ? info.hostname : info.serial)).replace(/[^\w-]/g, "_"),
-    ahkEnabled: statusAhkSaatIni,
+    ahkEnabled: statusAhkSaatIni, ahkKnown, ahkError,
     hostname: info.hostname,
     model: `${info.platform} (${info.arch})`,
     wifi: info.wifi,
@@ -139,12 +155,13 @@ function connectToServer() {
         wifi: info.wifi,
         ip: info.ip,
         mac: info.mac,
-        ahkEnabled: statusAhkSaatIni,
+        ahkEnabled: statusAhkSaatIni, ahkKnown, ahkError,
       })
     );
 
     clearInterval(statusTimer);
-    statusTimer = setInterval(periksaStatusAhk, 3000);
+    periksaStatusAhk();
+    statusTimer = setInterval(periksaStatusAhk, 5000);
   });
 
   ws.on("message", (msg) => {
@@ -161,10 +178,17 @@ function connectToServer() {
           }
         });
       }
-      if (data && data.type === "execute_command") {
-        if (data.action === "start_ahk")
-          kendalikanAhkBalikLayar("start", data.scriptName || "");
-        if (data.action === "stop_ahk") kendalikanAhkBalikLayar("stop");
+      if (data && data.type === 'execute_command') {
+        commandQueue = commandQueue.then(async()=>{
+          try {
+            if(!['start_ahk','stop_ahk'].includes(data.action)) throw new Error('Perintah tidak valid');
+            await kendalikanAhkBalikLayar(data.action==='start_ahk'?'start':'stop',data.scriptName || '');
+            if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'command_result',requestId:data.requestId,ahkEnabled:statusAhkSaatIni}));
+          } catch(error) {
+            ahkError=error.message; kirimTelemetri();
+            if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'command_result',requestId:data.requestId,error:error.message}));
+          }
+        });
       }
     } catch (e) {
       console.error("WS parse error:", e.message);

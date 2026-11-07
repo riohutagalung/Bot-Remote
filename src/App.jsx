@@ -165,6 +165,8 @@ export default function App() {
   const [wsTerhubung, setWsTerhubung] = useState(false);
   const [notifikasi, setNotifikasi] = useState(null);
 
+  const [ahkPending, setAhkPending] = useState(null);
+  const [ahkCommandError, setAhkCommandError] = useState(null);
   const [namaScriptInput, setNamaScriptInput] = useState({});
   const [activeDropdown, setActiveDropdown] = useState(null);
 
@@ -302,6 +304,8 @@ export default function App() {
         ...perangkat,
         isOnline: statusAktif,
         desktopEnabled: dataSinyalLive?.desktopEnabled === true,
+        ahkKnown: dataSinyalLive?.ahkKnown === true,
+        ahkError: dataSinyalLive?.ahkError || "",
         ahkEnabled: dataSinyalLive ? (dataSinyalLive.ahkEnabled || false) : (perangkat.ahkEnabled || false),
         ip: dataSinyalLive?.info?.ip || perangkat.ip || '-',
         mac: dataSinyalLive?.info?.mac || perangkat.mac || '-',
@@ -343,9 +347,11 @@ export default function App() {
     return { total, online, offline, ahkAktif };
   }, [masterDaftarPerangkat]);
 
-  const ubahStatusAhk = async (perangkat) => {
+  const ubahStatusAhk = async (perangkat, requestedCommand) => {
+    if (ahkPending) return;
+    setAhkPending(perangkat.serial); setAhkCommandError(null);
     try {
-      const aksiPerintah = perangkat.ahkEnabled ? 'stop_ahk' : 'start_ahk';
+      const aksiPerintah = requestedCommand || (perangkat.ahkEnabled ? 'stop_ahk' : 'start_ahk');
       const scriptSpesifik = namaScriptInput[perangkat.serial] || "";
 
       const respon = await fetch(`${URL_HTTP}/api/command`, {
@@ -357,13 +363,13 @@ export default function App() {
           scriptName: scriptSpesifik
         }),
       });
-      if (respon.ok) {
-        tampilkanNotifikasi(`${teks.notifAhkSend} ${perangkat.name} ${scriptSpesifik ? `(${scriptSpesifik})` : ''}`);
-        muatDataDariDatabase();
-      }
+      const result = await respon.json();
+      if (!respon.ok) throw new Error(result.error || 'Perintah gagal');
+      tampilkanNotifikasi(result.ahkEnabled ? 'AutoHotkey terkonfirmasi aktif' : 'AutoHotkey terkonfirmasi berhenti');
+      muatDataDariDatabase();
     } catch (k) {
-      console.error('Execution signal failed', k);
-    }
+      setAhkCommandError({id:perangkat.serial,message:k.message});
+    } finally {setAhkPending(null);}
   };
 
   const simpanKeDatabasePusat = async (dataTarget) => {
@@ -756,6 +762,8 @@ export default function App() {
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 font-mono mt-1">Serial: {perangkat.serial}</p>
+                    <p className="text-xs text-slate-400">AHK: {perangkat.ahkKnown ? (perangkat.ahkEnabled ? 'Aktif' : 'Berhenti') : 'Status belum dapat diperiksa'}</p>
+                    {(ahkCommandError?.id === perangkat.serial || perangkat.ahkError) && <p role="alert" className="text-xs text-rose-300 max-w-xl">{ahkCommandError?.id === perangkat.serial ? ahkCommandError.message : perangkat.ahkError}</p>}
                     <p className="text-xs text-slate-500 mt-0.5">WiFi: {perangkat.wifi} | IP: {perangkat.ip}</p>
 
                     {perangkat.isOnline && (
@@ -777,18 +785,8 @@ export default function App() {
 
                 <div className="flex items-center gap-2 w-full lg:w-auto justify-end relative">
                   <button className="px-4 py-2 bg-indigo-600 rounded-xl text-xs disabled:opacity-40" disabled={!perangkat.isOnline || !perangkat.desktopEnabled} onClick={() => setDesktopDevice(perangkat)}>Kontrol Laptop</button>
-                  <button
-                    onClick={() => ubahStatusAhk(perangkat)}
-                    disabled={!perangkat.isOnline}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${!perangkat.isOnline
-                      ? 'bg-slate-950 border border-slate-800 text-slate-600 cursor-not-allowed'
-                      : perangkat.ahkEnabled
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
-                        : 'bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
-                      }`}
-                  >
-                    {!perangkat.isOnline ? teks.btnControlOffline : perangkat.ahkEnabled ? teks.btnControlOn : teks.btnControlOff}
-                  </button>
+                  <button className="px-4 py-2 rounded-xl text-xs bg-emerald-900 disabled:opacity-40" disabled={!perangkat.isOnline || !!ahkPending} onClick={()=>ubahStatusAhk(perangkat,'start_ahk')}>{ahkPending===perangkat.serial ? 'Menunggu client…' : 'Jalankan AHK'}</button>
+                  <button className="px-4 py-2 rounded-xl text-xs bg-rose-900 disabled:opacity-40" disabled={!perangkat.isOnline || !!ahkPending} onClick={()=>ubahStatusAhk(perangkat,'stop_ahk')}>Matikan AHK</button>
 
                   <div className="relative">
                     <button
