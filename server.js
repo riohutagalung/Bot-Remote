@@ -1,4 +1,6 @@
 import express from "express";
+import {createDeviceStore} from "./device-store.js";
+import githubState from "./github-state.cjs";
 import {installSystemCommands} from "./system-server.js";
 import {installAhkCommands} from "./ahk-server.js";
 import crypto from "node:crypto";
@@ -47,24 +49,12 @@ const sameSecret = (a, b) => typeof a === "string" && crypto.timingSafeEqual(cry
 
 
 // --- LOGIKA DATABASE CLOUD (JSON FILE) ---
-function loadCloudData() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    }
-  } catch (e) {
-    console.error("Gagal baca database:", e.message);
-  }
-  return {};
-}
-
-function saveCloudData(data) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
-  } catch (e) {
-    console.error("Gagal simpan database:", e.message);
-  }
-}
+const deviceStore = createDeviceStore(DATA_FILE);
+const githubSync = githubState.createGitHubStateSync({root:__dirname,dataFile:DATA_FILE,agentToken});
+const githubSyncEnabled = process.env.GITHUB_STATE_SYNC === "1";
+if (githubSyncEnabled) await githubSync.restoreIfNeeded(deviceStore);
+function loadCloudData() { return deviceStore.load(); }
+function saveCloudData(data) { deviceStore.save(data); }
 
 // Inisialisasi data awal
 let savedDevices = Object.assign(Object.create(null), loadCloudData());
@@ -75,6 +65,7 @@ app.use(express.static(path.join(__dirname, "dist")));
 // =================================================================
 // LOGIN VALIDASI
 // =================================================================
+app.get("/api/health", (req,res)=>res.json({service:"bot-remote",version:2}));
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body || {};
   const rootPassword = dashboardPassword;
@@ -105,6 +96,7 @@ app.post("/api/logout", (req, res) => {
   wss.clients.forEach(ws => { if (ws.role === "dashboard" && ws.session === token) ws.close(1008, "Logged out"); });
   res.json({ success: true });
 });
+app.get("/api/storage-status", (req,res)=>res.json({localPersistent:true,githubEnabled:githubSyncEnabled,...githubSync.snapshot()}));
 const desktop = installDesktop(app, deviceConnections);
 
 // =================================================================
@@ -118,7 +110,7 @@ app.get("/api/devices", (req, res) => {
       deviceConnections.get(cleanId).readyState === 1;
     return { ...device, status: isLive ? "Online" : "Offline" };
   });
-  res.json({ devices: devicesArray });
+  res.json({ devices: devicesArray, storage: {localPersistent:true,githubEnabled:githubSyncEnabled,...githubSync.snapshot()} });
 });
 
 // =================================================================
@@ -208,9 +200,10 @@ app.put("/api/devices/:id", (req, res) => {
 // WEBSOCKET SERVER
 // =================================================================
 app.use('/api', (req,res)=>res.status(404).json({error:'Endpoint API tidak ditemukan'}));
-export const server = app.listen(PORT, process.env.HOST || "127.0.0.1", () =>
-  console.log(`Server running on port ${PORT}`)
-);
+export const server = app.listen(PORT, process.env.HOST || "127.0.0.1", () => {
+  console.log(`Server running on port ${PORT}`);
+  if(process.env.BOT_REMOTE_LOCAL_RUNTIME === '1') fs.writeFileSync(path.join(__dirname,'Runtime.json'),JSON.stringify({pid:process.pid,parentPid:process.ppid,root:__dirname,startedAt:new Date().toISOString()}));
+});
 server.keepAliveTimeout = 65000;
 server.headersTimeout = 66000;
 export const wss = new WebSocketServer({ server, maxPayload: 8 * 1024 * 1024 });
@@ -261,7 +254,7 @@ wss.on("connection", (ws) => {
           ...savedDevices[cleanId],
           id: data.id.toString().trim(),
           serial: data.serial || data.id.toString().trim(),
-          name: data.hostname || "Target PC",
+          name: savedDevices[cleanId]?.name || data.hostname || "Target PC",
           hostname: data.hostname || "Target PC",
           model: data.model || "-",
           wifi: data.wifi || "-",
@@ -271,6 +264,9 @@ wss.on("connection", (ws) => {
           systemEnabled: data.systemEnabled === true,
           shutdownAt: Number(data.shutdownAt) || 0,
           shutdownError: String(data.shutdownError || "").slice(0,500),
+          shutdownAllowed: data.shutdownAllowed === true,
+          shutdownPermissionKnown: data.shutdownPermissionKnown === true,
+          shutdownPermissionError: String(data.shutdownPermissionError || "").slice(0,600),
           ahkKnown: data.ahkKnown === true,
           ahkBlocked: data.ahkBlocked === true,
           ahkPolicySupported: data.ahkPolicySupported === true,
@@ -294,6 +290,9 @@ wss.on("connection", (ws) => {
           savedDevices[cleanId].ahkEnabled = !!data.ahkEnabled;
           savedDevices[cleanId].shutdownAt = Number(data.shutdownAt) || 0;
           savedDevices[cleanId].shutdownError = String(data.shutdownError || "").slice(0,500);
+          savedDevices[cleanId].shutdownAllowed = data.shutdownAllowed === true;
+          savedDevices[cleanId].shutdownPermissionKnown = data.shutdownPermissionKnown === true;
+          savedDevices[cleanId].shutdownPermissionError = String(data.shutdownPermissionError || "").slice(0,600);
           savedDevices[cleanId].ahkKnown = data.ahkKnown === true;
           savedDevices[cleanId].ahkBlocked = data.ahkBlocked === true;
           savedDevices[cleanId].ahkPolicySupported = data.ahkPolicySupported === true;
@@ -339,3 +338,4 @@ function broadcastToWeb() {
     }
   });
 }
+if (githubSyncEnabled) githubSync.start();

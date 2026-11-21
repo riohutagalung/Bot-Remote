@@ -16,6 +16,24 @@ export function selectBackend(origin, saved, configured) {
   return saved || configured || origin;
 }
 
+export const SHARED_CONNECTION_URL='https://raw.githubusercontent.com/riohutagalung/Bot-Remote/connection-state/connection.json';
+export async function discoverBackend({origin,saved,fetcher=fetch}={}){
+  const host=new URL(origin).hostname;
+  if(host.endsWith('.trycloudflare.com')||['127.0.0.1','localhost'].includes(host))return normalizeBackend(origin);
+  try{
+    const response=await fetcher(SHARED_CONNECTION_URL+'?v='+Math.floor(Date.now()/15000),{cache:'no-store',signal:AbortSignal.timeout(8000)});
+    if(!response.ok)throw Error('Koneksi GitHub belum tersedia');
+    const data=await response.json();
+    if(data.version!==1)throw Error('Format koneksi GitHub tidak sesuai');
+    const url=normalizeBackend(data.backendUrl);
+    if(!url.startsWith('https://'))throw Error('Koneksi bersama harus memakai HTTPS');
+    return url;
+  }catch{
+    if(saved && saved!==origin)return normalizeBackend(saved);
+    throw Error('Koneksi laptop belum tersedia di GitHub. Pastikan agent dan sinkronisasi GitHub berjalan; username dan password tidak perlu diganti.');
+  }
+}
+
 export async function readApiJson(response) {
   const text = await response.text();
   if (!response.headers.get('content-type')?.includes('application/json') || text.trimStart().startsWith('<')) {

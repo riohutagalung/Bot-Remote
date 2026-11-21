@@ -10,7 +10,7 @@ test('reject disabled, unsupported and arbitrary system actions before running a
 });
 test('shutdown acknowledges a cancellable timer before any OS command; never uses forced termination',async()=>{
   let callback,delay,cleared=false,calls=[];
-  const options={enabled:()=>true,platform:'win32',run:async(exe,args)=>{calls.push({exe,args});return {stdout:''};},schedule:(fn,ms)=>{callback=fn;delay=ms;return 'timer';},cancel:id=>{assert.equal(id,'timer');cleared=true;}};
+  const options={enabled:()=>true,platform:'win32',checkPermission:async()=>true,run:async(exe,args)=>{calls.push({exe,args});return {stdout:''};},schedule:(fn,ms)=>{callback=fn;delay=ms;return 'timer';},cancel:id=>{assert.equal(id,'timer');cleared=true;}};
   const agent=control.createSystemControl(options);
   const result=await agent.execute('shutdown');
   assert.equal(result.status,'scheduled');assert.equal(delay,10000);assert.equal(calls.length,0);
@@ -28,7 +28,13 @@ test('close requests use the bounded local script and preserve application save 
 });
 test('an OS shutdown failure is retained for the dashboard',async()=>{
   let callback;
-  const agent=control.createSystemControl({enabled:()=>true,platform:'win32',schedule:fn=>{callback=fn;return 1;},run:async()=>{throw Error('Access denied');}});
+  const agent=control.createSystemControl({enabled:()=>true,platform:'win32',checkPermission:async()=>true,schedule:fn=>{callback=fn;return 1;},run:async()=>{throw Error('Access denied');}});
   await agent.execute('shutdown');await callback();
-  assert.equal(agent.snapshot().shutdownError,'Access denied');assert.equal(agent.snapshot().shutdownAt,0);
+  assert.match(agent.snapshot().shutdownError,/Windows menolak shutdown/);assert.equal(agent.snapshot().shutdownAt,0);assert.equal(agent.snapshot().shutdownAllowed,false);
+});
+test('missing Windows shutdown privilege rejects the request before starting a countdown',async()=>{
+  let scheduled=false;
+  const agent=control.createSystemControl({enabled:()=>true,platform:'win32',run:async(exe,args)=>{assert.match(exe,/whoami\.exe$/);return {stdout:'"SeChangeNotifyPrivilege","Bypass traverse checking","Enabled"'};},schedule:()=>{scheduled=true;}});
+  await assert.rejects(agent.execute('shutdown'),/Windows belum memberikan hak/);
+  assert.equal(scheduled,false);assert.equal(agent.snapshot().shutdownAllowed,false);assert.equal(agent.snapshot().shutdownPermissionKnown,true);
 });

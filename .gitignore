@@ -27,3 +27,12 @@ __pycache__/
 
 .venv/
 .npm-cache/
+
+.secrets/
+.github-state/
+GitHub-Sync-Key.pub
+GitHub-Sync-Status.json
+cloud_devices.json.bak
+cloud_devices.json.*.tmp
+Stop-Remote.flag
+Runtime.json

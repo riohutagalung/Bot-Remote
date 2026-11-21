@@ -75,6 +75,7 @@ const {createAhkPolicy} = require('./ahk-policy.cjs');
 const {createSystemControl} = require('./system-control.cjs');
 const systemControl = createSystemControl({onChange:kirimTelemetri});
 const ahkPolicy = createAhkPolicy({readAhk,stopAhk,file:path.join(CURRENT_DIR,'ahk-policy.json'),onChange:kirimTelemetri});
+systemControl.inspectPermissions();
 async function periksaStatusAhk() { await ahkPolicy.refresh(); }
 // Enforce locally even while the dashboard or network is disconnected.
 periksaStatusAhk();

@@ -10,6 +10,7 @@ if (!fs.existsSync(path.join(root, 'dist/index.html'))) {
   throw new Error('Dashboard belum dibangun. Jalankan Setup.ps1 terlebih dahulu.');
 }
 process.env.HOST = '127.0.0.1';
+process.env.BOT_REMOTE_LOCAL_RUNTIME = '1';
 process.env.SERVER_URL = `ws://127.0.0.1:${process.env.PORT || 8080}`;
 const python = path.join(root,'.venv','Scripts','python.exe');
 if (!process.env.PYTHON_BIN && fs.existsSync(python)) process.env.PYTHON_BIN = python;

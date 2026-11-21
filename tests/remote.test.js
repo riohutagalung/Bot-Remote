@@ -31,7 +31,7 @@ test('authenticated dashboard → server → agent → result and disconnect', a
   const password = 'test-password-123456';
   const agentToken = 'test-agent-secret-'.repeat(3);
   const port = 21000 + Math.floor(Math.random()*10000);
-  Object.assign(process.env,{PORT:String(port),DATA_FILE:path.join(dir,'devices.json'),DASHBOARD_PASSWORD:password,DASHBOARD_USERNAME:'test-user',AGENT_TOKEN:agentToken,OPENAI_API_KEY:'mock-test-key',OPENAI_MODEL:'mock-model'});
+  Object.assign(process.env,{PORT:String(port),DATA_FILE:path.join(dir,'devices.json'),DASHBOARD_PASSWORD:password,DASHBOARD_USERNAME:'test-user',GITHUB_STATE_SYNC:'0',AGENT_TOKEN:agentToken,OPENAI_API_KEY:'mock-test-key',OPENAI_MODEL:'mock-model'});
   const {server, wss} = await import('../server.js');
   const sockets = [];
   t.after(async()=>{ sockets.forEach(ws=>ws.terminate()); wss.clients.forEach(ws=>ws.terminate()); await new Promise(resolve=>wss.close(resolve)); await new Promise(resolve=>server.close(resolve)); await rm(dir,{recursive:true,force:true}); });

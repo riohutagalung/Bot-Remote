@@ -4,7 +4,7 @@
 
 Login memakai **Username** dan **Password** dari `DASHBOARD_USERNAME` dan `DASHBOARD_PASSWORD` pada backend. Jangan mengisi username pada pengaturan alamat server. Formulir menempatkan akun terlebih dahulu; alamat HTTPS backend berada dalam **Pengaturan koneksi laptop**. Vercel menyajikan dashboard, sedangkan agent dan backend berjalan di laptop.
 
-Pada laptop yang menjalankan agent, gunakan http://127.0.0.1:8080/. Untuk perangkat lain gunakan alamat HTTPS aktif dari `Backend-URL.txt`, lalu simpan pada pengaturan koneksi dashboard. Cloudflare Quick Tunnel sementara: alamat dapat berubah, tidak menjamin uptime, dan tidak dijamin gratis seumur hidup. Launcher mencoba memulihkan tunnel yang berhenti atau ditolak tanpa mematikan backend lokal.
+Pada laptop yang menjalankan agent, gunakan http://127.0.0.1:8080/. Pada dashboard Vercel, login otomatis mencari alamat terbaru melalui branch `connection-state` di GitHub. Browser baru cukup mengisi username dan password. Pengaturan manual tetap tersedia. Cloudflare Quick Tunnel sementara: alamat dapat berubah, tidak menjamin uptime, dan tidak dijamin gratis seumur hidup. Launcher mencoba memulihkan tunnel yang berhenti atau ditolak tanpa mematikan backend lokal.
 
 Kontrol AHK tersedia sebagai **Matikan sekali**, **Blokir AHK terus**, dan **Nonaktifkan blokir**. Tidak perlu memilih nama script. Kebijakan blokir disimpan lokal dan berlaku selama agent berjalan. `Nonaktifkan-Blokir.cmd` mencabutnya melalui API lokal jika tunnel terputus.
 
@@ -13,6 +13,14 @@ Dengan `ALLOW_SYSTEM_CONTROL=1`, agent juga menerima permintaan **Tutup jendela 
 Agent dan launcher tetap terlihat serta bisa dihentikan pengguna. Default konfigurasi baru mematikan kontrol sistem dan kontrol layar. File `client.exe` lama dalam repository bukan build agent terbaru; gunakan sumber Node.js dan launcher yang dijelaskan di atas. Jangan mengunggah `.env`, token agent, password, file status perangkat, atau binary lama sebagai paket konfigurasi publik.
 
 Jalur utama versi ini: **HP/komputer pengontrol → Tailscale privat → dashboard di laptop → agent lokal → layar/mouse/keyboard**. Laptop menjalankan server dan client sekaligus. Tidak ada server Railway yang perlu disewa.
+
+## Penyimpanan koneksi dan perangkat di GitHub
+
+Backend menyimpan daftar laptop secara atomik pada cloud_devices.json beserta cadangan lokal .bak. Koneksi ulang tidak menghapus alias yang diedit. Branch connection-state menyimpan alamat HTTPS serta cadangan perangkat terenkripsi AES-256-GCM dengan kunci yang diturunkan dari AGENT_TOKEN. Simpan .env secara privat untuk pemulihan; jangan mengunggahnya. GitHub bukan server WebSocket: laptop dan tunnel tetap harus aktif. Implementasi saat ini menggunakan satu backend pusat; agent laptop lain harus terhubung ke backend yang sama.
+
+Jalankan node setup-github-sync.cjs satu kali. Tambahkan seluruh isi GitHub-Sync-Key.pub pada Settings → Deploy keys repositori ini dengan Allow write access. Set GITHUB_STATE_SYNC=1 pada .env, lalu mulai ulang controller. Private key tetap berada di .secrets, tidak dikirim ke repository. Status tampil di dashboard dan GitHub-Sync-Status.json. Jika GitHub menolak kunci, pembaruan alamat otomatis belum berfungsi. Branch data menonaktifkan deployment Vercel agar pembaruan data tidak membangun ulang frontend.
+
+Shutdown memeriksa hak Windows SeShutdownPrivilege sebelum memulai hitung mundur. Jika Windows menolak, tombol menunjukkan alasannya. Jalankan Jalankan-Ulang-Dari-Desktop.cmd secara manual melalui File Explorer pada akun Windows pemilik untuk memulai controller pada sesi desktop biasa. Helper ini tidak menaikkan izin atau mengubah kebijakan Windows. Jika akun itu tetap tidak memiliki hak shutdown, fungsi ini tetap tidak tersedia.
 
 ## Pemasangan satu kali pada laptop yang dikontrol
 

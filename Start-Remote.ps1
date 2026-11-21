@@ -23,6 +23,8 @@ $backend = $null
 $tunnel = $null
 $tunnelLog = Join-Path $PSScriptRoot ('tunnel-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 try {
+    $stopFlag = Join-Path $PSScriptRoot 'Stop-Remote.flag'
+    if (Test-Path -LiteralPath $stopFlag) { Remove-Item -LiteralPath $stopFlag }
     $urlFile = Join-Path $PSScriptRoot 'Backend-URL.txt'
     if (Test-Path -LiteralPath $urlFile) { Remove-Item -LiteralPath $urlFile }
     Write-Host 'Kontrol AHK aktif. Desktop/mouse/keyboard dinonaktifkan.' -ForegroundColor Green
@@ -35,6 +37,11 @@ try {
     Write-Host 'Password dashboard tersimpan di .env pada DASHBOARD_PASSWORD. Jangan bagikan file itu.'
     $savedUrl = $false
     while ($true) {
+        if (Test-Path -LiteralPath $stopFlag) {
+            Remove-Item -LiteralPath $stopFlag
+            Write-Host 'Pengguna meminta controller berhenti. Akses remote dihentikan.'
+            break
+        }
         if ($backend.HasExited) {
             Write-Host 'Backend berhenti; memulai ulang dengan konfigurasi terbaru. Alamat tunnel dipertahankan.' -ForegroundColor Yellow
             $backend = Start-Process -FilePath $nodePath -ArgumentList '--env-file=.env','local.js' -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru

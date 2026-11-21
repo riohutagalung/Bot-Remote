@@ -1,10 +1,18 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeBackend, selectBackend, readApiJson} from '../src/backend-url.js';
+import {normalizeBackend, selectBackend, readApiJson, discoverBackend} from '../src/backend-url.js';
 
 test('login resolves the entered laptop backend, including whitespace and trailing slash', () => {
   assert.equal(normalizeBackend(' https://laptop.example.com/ '), 'https://laptop.example.com');
   assert.equal(normalizeBackend('http://127.0.0.1:8080'), 'http://127.0.0.1:8080');
+});
+test('a fresh browser discovers the shared connection without any stored URL',async()=>{
+ const resolved=await discoverBackend({origin:'https://rhremote.vercel.app',fetcher:async()=>new Response(JSON.stringify({version:1,backendUrl:'https://new.trycloudflare.com'}))});
+ assert.equal(resolved,'https://new.trycloudflare.com');
+});
+test('shared connection takes precedence over a stale URL; invalid insecure targets are rejected',async()=>{
+ assert.equal(await discoverBackend({origin:'https://rhremote.vercel.app',saved:'https://old.trycloudflare.com',fetcher:async()=>new Response(JSON.stringify({version:1,backendUrl:'https://new.trycloudflare.com'}))}),'https://new.trycloudflare.com');
+ await assert.rejects(discoverBackend({origin:'https://rhremote.vercel.app',fetcher:async()=>new Response(JSON.stringify({version:1,backendUrl:'http://remote.example'}))}),/Koneksi laptop belum tersedia/);
 });
 test('laptop-hosted dashboard uses its current origin rather than a stored expired tunnel',()=>{
   assert.equal(selectBackend('https://live.trycloudflare.com','https://expired.trycloudflare.com'), 'https://live.trycloudflare.com');
