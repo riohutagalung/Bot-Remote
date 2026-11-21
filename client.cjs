@@ -15,6 +15,7 @@ const { desktopAction } = require("./desktop-client.cjs");
 let statusTimer;
 let commandQueue = Promise.resolve();
 const CURRENT_DIR = process.pkg ? path.dirname(process.execPath) : __dirname;
+const DEVICE_ID = require('./device-identity.cjs').getDeviceId({root:CURRENT_DIR,configured:process.env.DEVICE_ID});
 
 let wsGlobal = null;
 let statusAhkSaatIni = false;
@@ -89,7 +90,7 @@ function kirimTelemetri() {
   const info = getSystemInfo();
   const data = {
     type: "ahk_status",
-    id: (process.env.DEVICE_ID || (info.serial === "UNKNOWN" ? info.hostname : info.serial)).replace(/[^\w-]/g, "_"),
+    id: DEVICE_ID,
     ...ahkPolicy.snapshot(),
     systemEnabled: process.env.ALLOW_SYSTEM_CONTROL === "1", ...systemControl.snapshot(),
     hostname: info.hostname,
@@ -116,7 +117,7 @@ function connectToServer() {
     ws.send(
       JSON.stringify({
         type: "agent_auth", token: AGENT_TOKEN, desktopEnabled: process.env.ALLOW_DESKTOP_CONTROL === "1",
-        id: (process.env.DEVICE_ID || (info.serial === "UNKNOWN" ? info.hostname : info.serial)).replace(/[^\w-]/g, "_"),
+        id: DEVICE_ID,
         hostname: info.hostname,
         model: `${info.platform} (${info.arch})`,
         wifi: info.wifi,

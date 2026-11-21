@@ -23,7 +23,8 @@ import {
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
-let URL_HTTP = selectBackend(window.location.origin, localStorage.getItem('rh-backend-url'), import.meta.env.VITE_API_URL);
+const CENTRAL_URL = 'https://rbdnigqlshglabhvwfvj.supabase.co/functions/v1/remote';
+let URL_HTTP = CENTRAL_URL;
 const authHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY) || ''}` });
 let URL_WS = URL_HTTP.replace(/^http/, "ws");
 
@@ -207,7 +208,7 @@ export default function App() {
 
   const refreshSharedConnection = async () => {
     if(!automaticConnection)return URL_HTTP;
-    const selected=await discoverBackend({origin:window.location.origin,saved:localStorage.getItem('rh-backend-url')});
+    const selected=CENTRAL_URL;
     URL_HTTP=selected;URL_WS=selected.replace(/^http/,'ws');
     setBackendInput(selected);setBackendAddress(selected);localStorage.setItem('rh-backend-url',selected);
     return selected;
@@ -222,6 +223,7 @@ export default function App() {
       if (respon.ok) {
         const hasil = await readApiJson(respon);
         setStorageStatus(hasil.storage || null);
+        setWsTerhubung(true);
         setPerangkatDatabase(Array.isArray(hasil) ? hasil : hasil.devices || []);
         // A successful authenticated poll is also a fresh device snapshot.
         // Recover after a transient HTTP error even if WS has no new events.
@@ -241,13 +243,14 @@ export default function App() {
   useEffect(() => {
     if (!sudahLogin) return;
     muatDataDariDatabase();
-    const intervalDinamis = setInterval(muatDataDariDatabase, 5000);
+    const intervalDinamis = setInterval(muatDataDariDatabase, 15000);
     return () => clearInterval(intervalDinamis);
   }, [sudahLogin]);
 
   useEffect(() => {
     if (!sudahLogin) return;
 
+    if(URL_HTTP===CENTRAL_URL)return;
     let socket;
     let timAsinkron;
     let disposed = false;
@@ -394,6 +397,19 @@ export default function App() {
     return { total, online, offline, ahkAktif };
   }, [masterDaftarPerangkat]);
 
+  const awaitCommand = async (response) => {
+    let result=await readApiJson(response);
+    if(!response.ok)throw Error(result.error || 'Perintah gagal');
+    if(!result.commandId)return result;
+    const commandId=result.commandId;
+    for(let attempt=0;attempt<48;attempt++){
+      await new Promise(resolve=>setTimeout(resolve,2000));
+      const check=await fetch(URL_HTTP+'/api/commands/'+commandId,{headers:authHeaders(),signal:AbortSignal.timeout(10000)});
+      result=await readApiJson(check);if(!check.ok||result.error)throw Error(result.error || 'Hasil perintah belum terkonfirmasi');
+      if(!result.pending)return result;
+    }
+    throw Error('Hasil belum terkonfirmasi. Periksa status laptop sebelum mengulang.');
+  };
   const ubahStatusAhk = async (perangkat, requestedCommand) => {
     if (ahkPending) return;
     if (!wsTerhubung || !perangkat.isOnline) {
@@ -413,7 +429,7 @@ export default function App() {
           command: aksiPerintah
         }),
       });
-      const result = await readApiJson(respon);
+      const result = await awaitCommand(respon);
       if (!respon.ok) throw new Error(result.error || 'Perintah gagal');
       tampilkanNotifikasi(aksiPerintah === 'unblock_ahk' ? 'Blokir dinonaktifkan. AHK dapat dibuka manual.' : result.ahkBlocked ? 'Blokir AHK aktif pada agent laptop.' : 'AutoHotkey terkonfirmasi berhenti');
       muatDataDariDatabase();
@@ -426,7 +442,7 @@ export default function App() {
     setSystemPending(device.serial); setSystemMessage(null);
     try {
       const response=await fetch(`${URL_HTTP}/api/system/${encodeURIComponent(device.serial)}`,{method:'POST',headers:authHeaders(),signal:AbortSignal.timeout(20000),body:JSON.stringify({action,confirmed:true})});
-      const result=await readApiJson(response);
+      const result=await awaitCommand(response);
       if(!response.ok)throw Error(result.error || 'Aksi sistem gagal');
       setSystemMessage(result.status==='scheduled' ? 'Shutdown dijadwalkan dalam 10 detik. Gunakan Batalkan shutdown untuk membatalkan.' : result.status==='cancelled' ? 'Shutdown dibatalkan.' : `Permintaan tutup dikirim ke ${result.requested} jendela; ${result.failed} gagal. Aplikasi dapat meminta simpan dokumen.`);
       await muatDataDariDatabase();
@@ -648,14 +664,7 @@ export default function App() {
               className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-center text-sm focus:outline-none focus:border-indigo-500 font-mono transition"
             />
             </label>
-            <details className="rounded-xl border border-slate-800 p-3 text-xs text-slate-400">
-              <summary className="cursor-pointer text-slate-300">Pengaturan koneksi laptop</summary>
-              <label className="flex gap-2 items-center mt-3"><input type="checkbox" checked={automaticConnection} onChange={e=>setAutomaticConnection(e.target.checked)} />Temukan koneksi tersimpan di GitHub secara otomatis</label>
-              <label className="block mt-3">Alamat server laptop (opsional, untuk koneksi manual)
-                <input name="connection-url" disabled={automaticConnection} type="url" aria-label="Alamat server laptop (URL)" autoComplete="off" placeholder="https://alamat-laptop.trycloudflare.com" value={backendInput} onChange={e=>setBackendInput(e.target.value)} className="w-full mt-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white" />
-              </label>
-              <p className="mt-2">Koneksi otomatis membaca alamat terbaru yang disimpan aplikasi di GitHub. Kamu cukup mengisi username dan password. Pengaturan manual hanya dipakai bila mode otomatis dinonaktifkan.</p>
-            </details>
+            <p className="text-xs text-slate-400">Semua laptop terhubung ke pusat kontrol yang sama. Cukup masukkan username dan password.</p>
             <button title="Masuk dengan username dan password ke laptop yang terhubung."
               type="submit" disabled={loginPending}
               className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-xs tracking-wider uppercase transition-all"
@@ -727,8 +736,8 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        <p className="text-xs text-slate-400 break-all">Koneksi: {automaticConnection ? "otomatis" : "manual"}. Data laptop disimpan pada server, bukan hanya di browser.</p>
-        {storageStatus && <p role="status" className="text-xs text-slate-400">{storageStatus.status==='synced' ? 'Koneksi dan cadangan perangkat tersimpan di GitHub.' : storageStatus.githubEnabled ? 'Data lokal tersimpan. Sinkronisasi GitHub: '+(storageStatus.error || 'menunggu pembaruan') : 'Data lokal tersimpan. Sinkronisasi GitHub belum aktif.'}</p>}
+        <p className="text-xs text-slate-400 break-all">Pusat kontrol semua laptop. Perintah biasanya diterima dalam 30 detik; blokir AHK diperiksa lokal setiap 2 detik.</p>
+        {storageStatus && <p role="status" className="text-xs text-slate-400">{storageStatus.status==='central' ? 'Daftar laptop tersimpan pada database pusat. Status diperbarui berkala.' : storageStatus.status==='synced' ? 'Koneksi dan cadangan perangkat tersimpan di GitHub.' : storageStatus.githubEnabled ? 'Data lokal tersimpan. Sinkronisasi GitHub: '+(storageStatus.error || 'menunggu pembaruan') : 'Data lokal tersimpan. Sinkronisasi GitHub belum aktif.'}</p>}
         {systemMessage && <p role="status" className="p-4 rounded-xl bg-indigo-950 text-indigo-200">{systemMessage}</p>}
         {backendError && <p role="alert" className="p-4 rounded-xl bg-rose-950 text-rose-200">{backendError}</p>}
         {desktopDevice && <DesktopPanel key={desktopDevice.serial} device={desktopDevice} base={URL_HTTP} headers={authHeaders} onClose={() => setDesktopDevice(null)} /> }

@@ -1,0 +1,26 @@
+name: Build Windows client installer
+on:
+  push:
+    branches: [main]
+    paths: ['installer/**', 'central-agent.cjs', 'enroll-agent.cjs', 'device-identity.cjs', '.github/workflows/installer.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build installer
+        shell: pwsh
+        run: ./installer/build.ps1
+      - name: Publish installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'client-' + '${{ github.sha }}'.Substring(0,8)
+          gh release create $tag release/RH-Remote-Setup.exe release/SHA256SUMS.txt --target '${{ github.sha }}' --title 'RH Remote Windows Client' --notes 'Install once per laptop, sign in to enroll, then manage all laptops at https://rhremote.vercel.app/. Agent window stays visible. Windows shutdown requires the user account to have shutdown permission. No dashboard password or enrollment secret is included in this installer.'
