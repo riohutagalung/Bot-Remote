@@ -8,7 +8,7 @@ exports.createSystemControl=({run=nativeRun, enabled=()=>process.env.ALLOW_SYSTE
   let permissionPending=null;
   const system32=path.join(process.env.SystemRoot || 'C:\\Windows','System32');
   const publish=()=>onChange({...state});
-  const permissionMessage='Windows belum memberikan hak mematikan komputer kepada proses agent ini. Jalankan Jalankan-Ulang-Dari-Desktop.cmd lewat File Explorer pada akun Windows milikmu, lalu periksa lagi. Ini tidak meminta kenaikan izin; izin tidak dapat diberikan dari tombol web.';
+  const permissionMessage='Windows belum memberikan hak mematikan komputer kepada proses agent ini. Tutup jendela RH Remote Agent, lalu buka client.exe lewat File Explorer atau shortcut RH Remote pada akun Windows milikmu dan periksa lagi. Ini tidak meminta kenaikan izin; izin tidak dapat diberikan dari tombol web.';
   async function inspectPermissions(){
     if(permissionPending)return permissionPending;
     permissionPending=(async()=>{

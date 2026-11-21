@@ -234,6 +234,7 @@ export default function App() {
       }
     } catch (err) {
       console.error("Database connection synchronization failure:", err);
+      setWsTerhubung(false);
       setPerangkatOnlineLive([]);
       setBackendError(err.message==='Failed to fetch' ? 'Koneksi laptop terputus. Mencari alamat tersimpan terbaru secara otomatis; status perangkat belum terkonfirmasi.' : err.message);
       refreshSharedConnection().catch(()=>{});
