@@ -44,3 +44,16 @@ test('GitHub sync never replaces an encrypted backup belonging to another owner'
  const client=sync.createGitHubStateSync({root,dataFile:file,agentToken:secret,run:async(exe,args)=>{if(args[0]==='push')pushed=true;return {stdout:args[0]==='remote'?'git@github.com:riohutagalung/Bot-Remote.git\n':''};}});
  assert.equal(await client.flush(),false);assert.equal(pushed,false);assert.equal(fs.readFileSync(path.join(cache,'devices.enc.json'),'utf8'),encrypted);
 });
+
+test('live heartbeat changes do not write GitHub commits after a successful registry backup',async t=>{
+ const root=folder(t),file=path.join(root,'devices.json'),cache=path.join(root,'.github-state'),secret='owner-secret-'.repeat(4);
+ const store=createDeviceStore(file);store.save({pc_a:{id:'pc_a',name:'Work',lastSeen:'first',ahkEnabled:false}});
+ fs.writeFileSync(path.join(root,'Backend-URL.txt'),'https://example.trycloudflare.com');fs.mkdirSync(path.join(root,'.secrets'));
+ fs.writeFileSync(path.join(root,'.secrets','github-state-ed25519'),'test-only');fs.writeFileSync(path.join(root,'.secrets','github_known_hosts'),'test-only');fs.mkdirSync(path.join(cache,'.git'),{recursive:true});
+ let pushes=0,calls=0;
+ const client=sync.createGitHubStateSync({root,dataFile:file,agentToken:secret,run:async(exe,args)=>{calls++;if(args[0]==='push'){pushes++;assert.equal(args[2],'HEAD:refs/heads/connection-state');}return {stdout:args[0]==='remote'?'git@github.com:riohutagalung/Bot-Remote.git\n':args[0]==='diff'?'connection.json\n':''};}});
+ assert.equal(await client.flush(),true);assert.equal(pushes,1);const afterFirst=calls;
+ store.save({pc_a:{id:'pc_a',name:'Work',lastSeen:'new heartbeat',ahkEnabled:true}});
+ assert.equal(await client.flush(),true);assert.equal(calls,afterFirst);assert.equal(pushes,1);
+ const backup=crypt.decryptDevices(JSON.parse(fs.readFileSync(path.join(cache,'devices.enc.json'),'utf8')),secret);assert.deepEqual(backup,{pc_a:{id:'pc_a',name:'Work'}});
+});

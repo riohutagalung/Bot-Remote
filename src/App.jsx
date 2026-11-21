@@ -233,7 +233,7 @@ export default function App() {
     } catch (err) {
       console.error("Database connection synchronization failure:", err);
       setPerangkatOnlineLive([]);
-      setBackendError(err.message);
+      setBackendError(err.message==='Failed to fetch' ? 'Koneksi laptop terputus. Mencari alamat tersimpan terbaru secara otomatis; status perangkat belum terkonfirmasi.' : err.message);
       refreshSharedConnection().catch(()=>{});
     }
   };
@@ -530,7 +530,7 @@ export default function App() {
         setNotifikasi(data.message || data.error || `Login ditolak (HTTP ${kirim.status})`);
       }
     } catch (error) {
-      setNotifikasi(error.message === 'Failed to fetch' ? 'Server tidak terjangkau. Periksa alamat backend dan pastikan laptop aktif.' : error.message);
+      setNotifikasi(error.message === 'Failed to fetch' ? 'Laptop belum terjangkau melalui koneksi tersimpan. Pastikan agent berjalan; username dan password tidak perlu diganti.' : error.message);
     } finally { setLoginPending(false); }
   };
 
@@ -843,7 +843,7 @@ export default function App() {
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 font-mono mt-1">Serial: {perangkat.serial}</p>
-                    <p className="text-xs text-amber-300">Blokir: {perangkat.ahkPolicySupported ? (perangkat.ahkBlocked ? (perangkat.ahkError ? 'AKTIF — GAGAL memeriksa atau menghentikan AHK; lihat pesan Windows' : 'AKTIF — AHK dihentikan otomatis selama agent berjalan') : 'Nonaktif — boleh dibuka manual') : 'Agent perlu diperbarui'}</p>
+                    <p className="text-xs text-amber-300">Blokir: {!perangkat.isOnline ? 'Belum terkonfirmasi — laptop tidak terhubung' : perangkat.ahkPolicySupported ? (perangkat.ahkBlocked ? (perangkat.ahkError ? 'AKTIF — GAGAL memeriksa atau menghentikan AHK; lihat pesan Windows' : 'AKTIF — AHK dihentikan otomatis selama agent berjalan') : 'Nonaktif — boleh dibuka manual') : 'Agent perlu diperbarui'}</p>
                     <p className="text-xs text-slate-400">AHK: {perangkat.ahkKnown ? (perangkat.ahkEnabled ? 'Aktif' : 'Berhenti') : 'Status belum dapat diperiksa'}</p>
                     {(ahkCommandError?.id === perangkat.serial || perangkat.ahkError) && <p role="alert" className="text-xs text-rose-300 max-w-xl">{ahkCommandError?.id === perangkat.serial ? ahkCommandError.message : perangkat.ahkError}</p>}
                     {!!perangkat.shutdownAt && <p role="alert" className="text-rose-300 text-xs">Shutdown menunggu: gunakan Batalkan shutdown segera jika ingin membatalkan.</p>}

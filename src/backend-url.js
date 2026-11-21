@@ -21,7 +21,7 @@ export async function discoverBackend({origin,saved,fetcher=fetch}={}){
   const host=new URL(origin).hostname;
   if(host.endsWith('.trycloudflare.com')||['127.0.0.1','localhost'].includes(host))return normalizeBackend(origin);
   try{
-    const response=await fetcher(SHARED_CONNECTION_URL+'?v='+Math.floor(Date.now()/15000),{cache:'no-store',signal:AbortSignal.timeout(8000)});
+    const response=await fetcher(SHARED_CONNECTION_URL+'?nocache='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(8000)});
     if(!response.ok)throw Error('Koneksi GitHub belum tersedia');
     const data=await response.json();
     if(data.version!==1)throw Error('Format koneksi GitHub tidak sesuai');

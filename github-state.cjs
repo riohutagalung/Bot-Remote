@@ -8,6 +8,12 @@ const REPO='riohutagalung/Bot-Remote',BRANCH='connection-state';
 const RAW_ROOT=`https://raw.githubusercontent.com/${REPO}/${BRANCH}`;
 const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
 const validData=data=>data&&typeof data==='object'&&!Array.isArray(data)&&Object.entries(data).every(([id,value])=>/^[a-zA-Z0-9_-]{1,128}$/.test(id)&&value&&typeof value==='object'&&!Array.isArray(value));
+// Only durable registry fields enter the backup. Heartbeat timestamps and live
+// process status must not generate a repository commit every few seconds.
+function durableRecords(devices){
+ const fields=['id','serial','name','hostname','model','wifi','ip','mac'];
+ return Object.fromEntries(Object.entries(devices).sort(([a],[b])=>a.localeCompare(b)).map(([id,record])=>[id,Object.fromEntries(fields.filter(field=>typeof record[field]==='string').map(field=>[field,record[field]]))]));
+}
 function normalizeConnection(value){
  const url=new URL(value.trim());
  if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw Error('Alamat koneksi GitHub harus berupa origin HTTPS');
@@ -62,7 +68,8 @@ function createGitHubStateSync({root,dataFile,agentToken,fetcher=fetch,run=runNa
    const urlFile=path.join(root,'Backend-URL.txt');
    if(!fs.existsSync(urlFile)||!fs.existsSync(dataFile)){report('waiting','Menunggu tunnel dan data perangkat.');return false;}
    const backendUrl=normalizeConnection(fs.readFileSync(urlFile,'utf8'));
-   const devices=JSON.parse(fs.readFileSync(dataFile,'utf8'));if(!validData(devices))throw Error('Data lokal tidak valid; cadangan tidak ditimpa.');
+   const localDevices=JSON.parse(fs.readFileSync(dataFile,'utf8'));if(!validData(localDevices))throw Error('Data lokal tidak valid; cadangan tidak ditimpa.');
+   const devices=durableRecords(localDevices);
    const payload=JSON.stringify({backendUrl,devices});
    if(payload===lastPayload && state.lastSuccessAt)return true;
    if(Date.now()-lastAttempt<30000)return false;
@@ -84,7 +91,7 @@ function createGitHubStateSync({root,dataFile,agentToken,fetcher=fetch,run=runNa
    if(fs.existsSync(backupPath)){
     let previous;
     try{previous=decryptDevices(JSON.parse(fs.readFileSync(backupPath,'utf8')),agentToken);}catch{throw Error('Kunci cadangan tidak cocok. Cadangan lama di GitHub dipertahankan.');}
-    backupDevices={...previous,...devices};
+    backupDevices=durableRecords({...previous,...devices});
     sameBackup=JSON.stringify(previous)===JSON.stringify(backupDevices);
    }
    if(!sameBackup)fs.writeFileSync(backupPath,JSON.stringify(encryptDevices(backupDevices,agentToken),null,2)+'\n');
