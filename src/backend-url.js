@@ -8,3 +8,19 @@ export function normalizeBackend(value) {
   }
   return url.origin;
 }
+
+export function selectBackend(origin, saved, configured) {
+  const host = new URL(origin).hostname;
+  // A dashboard served by the laptop must use that same live backend.
+  if (host.endsWith('.trycloudflare.com') || ['localhost','127.0.0.1'].includes(host)) return origin;
+  return saved || configured || origin;
+}
+
+export async function readApiJson(response) {
+  const text = await response.text();
+  if (!response.headers.get('content-type')?.includes('application/json') || text.trimStart().startsWith('<')) {
+    throw new Error(`Backend tidak tersedia atau alamat tunnel sudah berubah (HTTP ${response.status}). Buka alamat terbaru dari Backend-URL.txt. Blokir lokal tetap mengikuti pilihan terakhir sampai perintah nonaktifkan diterima agent.`);
+  }
+  try { return JSON.parse(text); }
+  catch { throw new Error('Respons backend rusak. Perintah belum dapat dikonfirmasi; coba hubungkan kembali.'); }
+}

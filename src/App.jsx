@@ -1,5 +1,5 @@
 import DesktopPanel from './DesktopPanel';
-import { normalizeBackend } from './backend-url.js';
+import { normalizeBackend, selectBackend, readApiJson } from './backend-url.js';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Download,
@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 const SESS_KEY = 'rh-auth-session';
-let URL_HTTP = localStorage.getItem('rh-backend-url') || import.meta.env.VITE_API_URL || window.location.origin;
+let URL_HTTP = selectBackend(window.location.origin, localStorage.getItem('rh-backend-url'), import.meta.env.VITE_API_URL);
 const authHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY) || ''}` });
 let URL_WS = URL_HTTP.replace(/^http/, "ws");
 
@@ -155,7 +155,11 @@ export default function App() {
   const [sudahLogin, setSudahLogin] = useState(false);
   const [cekSesiSelesai, setCekSesiSelesai] = useState(false);
   const [inputPassword, setInputPassword] = useState('');
-  const [backendInput, setBackendInput] = useState(URL_HTTP);
+  const [inputUsername, setInputUsername] = useState('');
+  const [systemPending, setSystemPending] = useState(null);
+  const [systemMessage, setSystemMessage] = useState(null);
+  const backendNeedsSetup = URL_HTTP === window.location.origin && window.location.hostname.endsWith('.vercel.app');
+  const [backendInput, setBackendInput] = useState(backendNeedsSetup ? '' : URL_HTTP);
   const [loginPending, setLoginPending] = useState(false);
 
   const [perangkatDatabase, setPerangkatDatabase] = useState([]);
@@ -167,6 +171,7 @@ export default function App() {
 
   const [ahkPending, setAhkPending] = useState(null);
   const [ahkCommandError, setAhkCommandError] = useState(null);
+  const [backendError, setBackendError] = useState(null);
   const [namaScriptInput, setNamaScriptInput] = useState({});
   const [activeDropdown, setActiveDropdown] = useState(null);
 
@@ -186,7 +191,7 @@ export default function App() {
 
   useEffect(() => {
     const tokenOtorisasi = localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY);
-    if (tokenOtorisasi) setSudahLogin(true);
+    if (tokenOtorisasi && !backendNeedsSetup) setSudahLogin(true);
     setCekSesiSelesai(true);
   }, []);
 
@@ -198,16 +203,24 @@ export default function App() {
 
   const muatDataDariDatabase = async () => {
     try {
-      const respon = await fetch(`${URL_HTTP}/api/devices`, {headers: authHeaders()});
+      const respon = await fetch(`${URL_HTTP}/api/devices`, {headers: authHeaders(), signal:AbortSignal.timeout(10000)});
       if (respon.status === 401) {
         localStorage.removeItem(SESS_KEY); sessionStorage.removeItem(SESS_KEY); setSudahLogin(false); return;
       }
       if (respon.ok) {
-        const hasil = await respon.json();
+        const hasil = await readApiJson(respon);
         setPerangkatDatabase(Array.isArray(hasil) ? hasil : hasil.devices || []);
+        // A successful authenticated poll is also a fresh device snapshot.
+        // Recover after a transient HTTP error even if WS has no new events.
+        setPerangkatOnlineLive(Array.isArray(hasil) ? hasil : hasil.devices || []);
+        setBackendError(null);
+      } else {
+        throw new Error(`Backend gagal merespons (HTTP ${respon.status}).`);
       }
     } catch (err) {
       console.error("Database connection synchronization failure:", err);
+      setPerangkatOnlineLive([]);
+      setBackendError(err.message);
     }
   };
 
@@ -247,6 +260,8 @@ export default function App() {
 
       socket.onclose = () => {
         setWsTerhubung(false);
+        setPerangkatOnlineLive([]);
+        setBackendError('Koneksi agent terputus. Status perangkat belum terkonfirmasi. Gunakan alamat terbaru dalam Backend-URL.txt; jika web tidak terjangkau, jalankan Nonaktifkan-Blokir.cmd di laptop.');
         if (!disposed) timAsinkron = setTimeout(hubungkanKoneksiSinyal, 5000);
       };
 
@@ -304,7 +319,12 @@ export default function App() {
         ...perangkat,
         isOnline: statusAktif,
         desktopEnabled: dataSinyalLive?.desktopEnabled === true,
+        systemEnabled: dataSinyalLive?.systemEnabled === true,
+        shutdownAt: dataSinyalLive?.shutdownAt || 0,
+        shutdownError: dataSinyalLive?.shutdownError || "",
         ahkKnown: dataSinyalLive?.ahkKnown === true,
+        ahkBlocked: dataSinyalLive?.ahkBlocked === true,
+        ahkPolicySupported: dataSinyalLive?.ahkPolicySupported === true,
         ahkError: dataSinyalLive?.ahkError || "",
         ahkEnabled: dataSinyalLive ? (dataSinyalLive.ahkEnabled || false) : (perangkat.ahkEnabled || false),
         ip: dataSinyalLive?.info?.ip || perangkat.ip || '-',
@@ -331,6 +351,13 @@ export default function App() {
           mac: live.info?.mac || '-',
           isOnline: live.status === "Online",
           ahkEnabled: live.ahkEnabled || false,
+          ahkKnown: live.ahkKnown === true,
+          systemEnabled: live.systemEnabled === true,
+          shutdownAt: live.shutdownAt || 0,
+          shutdownError: live.shutdownError || "",
+          ahkError: live.ahkError || "",
+          ahkBlocked: live.ahkBlocked === true,
+          ahkPolicySupported: live.ahkPolicySupported === true,
           terbacaOtomatisBelumDisimpan: true
         });
       }
@@ -349,27 +376,46 @@ export default function App() {
 
   const ubahStatusAhk = async (perangkat, requestedCommand) => {
     if (ahkPending) return;
+    if (!wsTerhubung || !perangkat.isOnline) {
+      setAhkCommandError({id:perangkat.serial,message:'Laptop belum tersambung. Perintah belum dikirim.'});
+      return;
+    }
     setAhkPending(perangkat.serial); setAhkCommandError(null);
     try {
-      const aksiPerintah = requestedCommand || (perangkat.ahkEnabled ? 'stop_ahk' : 'start_ahk');
-      const scriptSpesifik = namaScriptInput[perangkat.serial] || "";
+      const aksiPerintah = requestedCommand || 'stop_ahk';
 
       const respon = await fetch(`${URL_HTTP}/api/command`, {
         method: 'POST',
+        signal: AbortSignal.timeout(20000),
         headers: authHeaders(),
         body: JSON.stringify({
           deviceId: perangkat.serial,
-          command: aksiPerintah,
-          scriptName: scriptSpesifik
+          command: aksiPerintah
         }),
       });
-      const result = await respon.json();
+      const result = await readApiJson(respon);
       if (!respon.ok) throw new Error(result.error || 'Perintah gagal');
-      tampilkanNotifikasi(result.ahkEnabled ? 'AutoHotkey terkonfirmasi aktif' : 'AutoHotkey terkonfirmasi berhenti');
+      tampilkanNotifikasi(aksiPerintah === 'unblock_ahk' ? 'Blokir dinonaktifkan. AHK dapat dibuka manual.' : result.ahkBlocked ? 'Blokir AHK aktif pada agent laptop.' : 'AutoHotkey terkonfirmasi berhenti');
       muatDataDariDatabase();
     } catch (k) {
       setAhkCommandError({id:perangkat.serial,message:k.message});
     } finally {setAhkPending(null);}
+  };
+
+  const sendSystemAction = async (device, action) => {
+    setSystemPending(device.serial); setSystemMessage(null);
+    try {
+      const response=await fetch(`${URL_HTTP}/api/system/${encodeURIComponent(device.serial)}`,{method:'POST',headers:authHeaders(),signal:AbortSignal.timeout(20000),body:JSON.stringify({action,confirmed:true})});
+      const result=await readApiJson(response);
+      if(!response.ok)throw Error(result.error || 'Aksi sistem gagal');
+      setSystemMessage(result.status==='scheduled' ? 'Shutdown dijadwalkan dalam 10 detik. Gunakan Batalkan shutdown untuk membatalkan.' : result.status==='cancelled' ? 'Shutdown dibatalkan.' : `Permintaan tutup dikirim ke ${result.requested} jendela; ${result.failed} gagal. Aplikasi dapat meminta simpan dokumen.`);
+      await muatDataDariDatabase();
+    } catch(error) {setSystemMessage(error.message);}
+    finally {setSystemPending(null);}
+  };
+  const confirmSystemAction = (device,action) => {
+    if(action==='cancel_shutdown') {sendSystemAction(device,action);return;}
+    triggerCustomConfirm(action==='shutdown' ? 'Matikan laptop ini?' : 'Tutup jendela aplikasi?',action==='shutdown' ? 'Laptop akan dimatikan dalam 10 detik setelah agent menerima perintah. Simpan pekerjaanmu. Kamu bisa memilih Batalkan shutdown selama hitung mundur. Aplikasi yang belum menyimpan data dapat menahan shutdown.' : 'Meminta jendela aplikasi di laptop ini menutup secara normal. Aplikasi dapat meminta simpan dokumen. Jendela agent dan terminal dipertahankan.',true,()=>sendSystemAction(device,action));
   };
 
   const simpanKeDatabasePusat = async (dataTarget) => {
@@ -449,7 +495,7 @@ export default function App() {
       const kirim = await fetch(`${selectedBackend}/api/login`, {
         method: 'POST', signal: AbortSignal.timeout(15000),
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: inputPassword })
+        body: JSON.stringify({ username:inputUsername, password: inputPassword })
       });
       if (kirim.status === 405) throw new Error('Alamat ini hanya frontend. Isi Alamat backend laptop dengan alamat tunnel HTTPS laptop.');
       if (!kirim.headers.get('content-type')?.includes('application/json')) throw new Error(`Server mengembalikan HTTP ${kirim.status}, bukan layanan login Bot-Remote.`);
@@ -567,18 +613,27 @@ export default function App() {
           </div>
 
           <form className="space-y-3" onSubmit={e => {e.preventDefault(); eksekusiLoginAPI();}}>
-            <label className="block text-xs text-slate-400">Alamat backend laptop
-              <input type="url" aria-label="Alamat backend laptop" value={backendInput} onChange={e=>setBackendInput(e.target.value)} className="w-full mt-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white" />
-            </label>
-            <p className="text-xs text-slate-400">Login akan memakai alamat yang diisi di atas.</p>
             {notifikasi && <p role="alert" className="text-sm text-rose-300">{notifikasi}</p>}
+            <label className="block text-xs text-slate-300">Username
+              <input name="username" aria-label="Username" autoComplete="username" placeholder="Username" value={inputUsername} onChange={e=>setInputUsername(e.target.value)} className="w-full mt-1 px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-center text-sm" required />
+            </label>
+            <label className="block text-xs text-slate-300">Password
             <input
+              name="password" aria-label="Password" autoComplete="current-password" required
               type="password"
               value={inputPassword}
               onChange={(e) => setInputPassword(e.target.value)}
               placeholder={teks.authPlace}
               className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-center text-sm focus:outline-none focus:border-indigo-500 font-mono transition"
             />
+            </label>
+            <details open={backendNeedsSetup || undefined} className="rounded-xl border border-slate-800 p-3 text-xs text-slate-400">
+              <summary className="cursor-pointer text-slate-300">Pengaturan koneksi laptop</summary>
+              <label className="block mt-3">Alamat server laptop (URL)
+                <input name="connection-url" type="url" aria-label="Alamat server laptop (URL)" autoComplete="off" placeholder="https://alamat-laptop.trycloudflare.com" value={backendInput} onChange={e=>setBackendInput(e.target.value)} className="w-full mt-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white" />
+              </label>
+              <p className="mt-2">Isi alamat HTTPS dari Backend-URL.txt, bukan username. Di laptop yang menjalankan agent, kamu juga bisa masuk langsung melalui http://127.0.0.1:8080.</p>
+            </details>
             <button
               type="submit" disabled={loginPending}
               className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-xs tracking-wider uppercase transition-all"
@@ -650,6 +705,9 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        <p className="text-xs text-slate-400 break-all">Backend: {URL_HTTP}. Blokir terus berlaku selama agent berjalan sampai perintah nonaktifkan dikonfirmasi.</p>
+        {systemMessage && <p role="status" className="p-4 rounded-xl bg-indigo-950 text-indigo-200">{systemMessage}</p>}
+        {backendError && <p role="alert" className="p-4 rounded-xl bg-rose-950 text-rose-200">{backendError}</p>}
         {desktopDevice && <DesktopPanel key={desktopDevice.serial} device={desktopDevice} base={URL_HTTP} headers={authHeaders} onClose={() => setDesktopDevice(null)} /> }
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl relative overflow-hidden">
@@ -762,31 +820,23 @@ export default function App() {
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 font-mono mt-1">Serial: {perangkat.serial}</p>
+                    <p className="text-xs text-amber-300">Blokir: {perangkat.ahkPolicySupported ? (perangkat.ahkBlocked ? (perangkat.ahkError ? 'AKTIF — GAGAL memeriksa atau menghentikan AHK; lihat pesan Windows' : 'AKTIF — AHK dihentikan otomatis selama agent berjalan') : 'Nonaktif — boleh dibuka manual') : 'Agent perlu diperbarui'}</p>
                     <p className="text-xs text-slate-400">AHK: {perangkat.ahkKnown ? (perangkat.ahkEnabled ? 'Aktif' : 'Berhenti') : 'Status belum dapat diperiksa'}</p>
                     {(ahkCommandError?.id === perangkat.serial || perangkat.ahkError) && <p role="alert" className="text-xs text-rose-300 max-w-xl">{ahkCommandError?.id === perangkat.serial ? ahkCommandError.message : perangkat.ahkError}</p>}
+                    {!!perangkat.shutdownAt && <p role="alert" className="text-rose-300 text-xs">Shutdown menunggu: gunakan Batalkan shutdown segera jika ingin membatalkan.</p>}
+                    {perangkat.shutdownError && <p role="alert" className="text-rose-300 text-xs">{perangkat.shutdownError}</p>}
                     <p className="text-xs text-slate-500 mt-0.5">WiFi: {perangkat.wifi} | IP: {perangkat.ip}</p>
 
-                    {perangkat.isOnline && (
-                      <div className="mt-2 max-w-xs">
-                        <input
-                          type="text"
-                          placeholder={teks.formPlaceScript}
-                          value={namaScriptInput[perangkat.serial] || ""}
-                          onChange={(e) => setNamaScriptInput({
-                            ...namaScriptInput,
-                            [perangkat.serial]: e.target.value
-                          })}
-                          className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-white focus:outline-none focus:border-indigo-500 font-mono transition"
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full lg:w-auto justify-end relative">
+                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end relative">
+                  <button className="px-4 py-2 rounded-xl text-xs bg-slate-700 disabled:opacity-40" disabled={!perangkat.isOnline || !perangkat.systemEnabled || !!systemPending} onClick={()=>confirmSystemAction(perangkat,"close_windows")}>Tutup jendela aplikasi</button>
+                  <button className="px-4 py-2 rounded-xl text-xs bg-rose-800 disabled:opacity-40" disabled={!perangkat.isOnline || !perangkat.systemEnabled || !!systemPending} onClick={()=>confirmSystemAction(perangkat,"shutdown")}>Matikan laptop</button>
+                  {!!perangkat.shutdownAt && <button className="px-4 py-2 rounded-xl text-xs bg-amber-800 disabled:opacity-40" disabled={!perangkat.isOnline} onClick={()=>confirmSystemAction(perangkat,"cancel_shutdown")}>Batalkan shutdown</button>}
                   <button className="px-4 py-2 bg-indigo-600 rounded-xl text-xs disabled:opacity-40" disabled={!perangkat.isOnline || !perangkat.desktopEnabled} onClick={() => setDesktopDevice(perangkat)}>Kontrol Laptop</button>
-                  <button className="px-4 py-2 rounded-xl text-xs bg-emerald-900 disabled:opacity-40" disabled={!perangkat.isOnline || !!ahkPending} onClick={()=>ubahStatusAhk(perangkat,'start_ahk')}>{ahkPending===perangkat.serial ? 'Menunggu client…' : 'Jalankan AHK'}</button>
-                  <button className="px-4 py-2 rounded-xl text-xs bg-rose-900 disabled:opacity-40" disabled={!perangkat.isOnline || !!ahkPending} onClick={()=>ubahStatusAhk(perangkat,'stop_ahk')}>Matikan AHK</button>
+                  <button className="px-4 py-2 rounded-xl text-xs bg-emerald-900 disabled:opacity-40" disabled={!perangkat.isOnline || !perangkat.ahkPolicySupported || !!ahkPending} onClick={()=>ubahStatusAhk(perangkat,perangkat.ahkBlocked ? 'unblock_ahk' : 'block_ahk')}>{ahkPending===perangkat.serial ? 'Menunggu client…' : perangkat.ahkBlocked ? 'Nonaktifkan blokir' : 'Blokir AHK terus'}</button>
+                  <button className="px-4 py-2 rounded-xl text-xs bg-rose-900 disabled:opacity-40" disabled={!perangkat.isOnline || !!ahkPending} onClick={()=>ubahStatusAhk(perangkat,'stop_ahk')}>Matikan sekali</button>
 
                   <div className="relative">
                     <button

@@ -18,6 +18,5 @@ if (!server.listening) await once(server, 'listening');
 createRequire(import.meta.url)('./client.cjs');
 console.log('MODE LAPTOP MANDIRI — Railway tidak diperlukan');
 console.log(`Dashboard lokal: http://127.0.0.1:${process.env.PORT || 8080}`);
-console.log('Akses jarak jauh: aktifkan Tailscale pada laptop dan perangkat pengontrol,');
-console.log(`lalu jalankan: tailscale serve --bg http://127.0.0.1:${process.env.PORT || 8080}`);
+console.log('Akses jarak jauh: gunakan alamat dalam Backend-URL.txt setelah launcher membuat tunnel.');
 console.log('Ctrl+C menutup server dan agent sekaligus.');

@@ -3,7 +3,7 @@ export function installAhkCommands(app, connections) {
   const pending = new Map();
   app.post('/api/command', async (req,res) => {
     const {deviceId, command, scriptName=''} = req.body || {};
-    if (typeof deviceId !== 'string' || !['start_ahk','stop_ahk'].includes(command) || typeof scriptName !== 'string' || (scriptName && !/^[\w .-]+\.ahk$/i.test(scriptName))) return res.status(400).json({error:'Perintah / nama script tidak valid'});
+    if (typeof deviceId !== 'string' || !['stop_ahk','block_ahk','unblock_ahk'].includes(command) || typeof scriptName !== 'string' || (scriptName && !/^[\w .-]+\.ahk$/i.test(scriptName))) return res.status(400).json({error:'Perintah / nama script tidak valid'});
     const ws = connections.get(deviceId.trim().toLowerCase());
     if (!ws || ws.readyState !== 1) return res.status(404).json({error:'Laptop offline'});
     const requestId = crypto.randomUUID();
@@ -26,7 +26,7 @@ export function installAhkCommands(app, connections) {
         clearTimeout(item.timer);pending.delete(data.requestId);
         if(data.error) item.reject(new Error(String(data.error).slice(0,600)));
         else if(typeof data.ahkEnabled !== 'boolean') item.reject(new Error('Hasil client tidak valid'));
-        else item.resolve({ahkEnabled:data.ahkEnabled});
+        else item.resolve({ahkEnabled:data.ahkEnabled, ...(typeof data.ahkBlocked === 'boolean' ? {ahkBlocked:data.ahkBlocked} : {})});
       }
       return true;
     },

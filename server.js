@@ -1,4 +1,5 @@
 import express from "express";
+import {installSystemCommands} from "./system-server.js";
 import {installAhkCommands} from "./ahk-server.js";
 import crypto from "node:crypto";
 import { installDesktop } from "./desktop-server.js";
@@ -33,6 +34,7 @@ const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "cloud_devices.j
 
 // Server-side credentials and expiring dashboard sessions.
 const dashboardPassword = process.env.DASHBOARD_PASSWORD;
+const dashboardUsername = process.env.DASHBOARD_USERNAME || "";
 const agentToken = process.env.AGENT_TOKEN;
 if (!dashboardPassword || dashboardPassword.length < 12 || !agentToken || agentToken.length < 32) {
   throw new Error("Set DASHBOARD_PASSWORD (12+ chars) and AGENT_TOKEN (32+ chars)");
@@ -74,7 +76,7 @@ app.use(express.static(path.join(__dirname, "dist")));
 // LOGIN VALIDASI
 // =================================================================
 app.post("/api/login", (req, res) => {
-  const { password } = req.body || {};
+  const { username, password } = req.body || {};
   const rootPassword = dashboardPassword;
   const now = Date.now();
   const loginKey = req.ip;
@@ -83,13 +85,13 @@ app.post("/api/login", (req, res) => {
   if (attempts.count >= 10) return res.status(429).json({error:"Terlalu banyak percobaan. Coba lagi sebentar."});
   attempts.count++; loginAttempts.set(loginKey, attempts);
 
-  if (sameSecret(password, rootPassword)) {
+  if (sameSecret(password, rootPassword) && (!dashboardUsername || sameSecret(username, dashboardUsername))) {
     for (const [token, expires] of sessions) if (expires <= Date.now()) sessions.delete(token);
     const SECURE_TOKEN = crypto.randomBytes(32).toString("hex");
     sessions.set(SECURE_TOKEN, Date.now() + 8 * 60 * 60 * 1000);
     return res.json({ success: true, token: SECURE_TOKEN });
   }
-  return res.status(401).json({ success: false, message: "Kata sandi ditolak!" });
+  return res.status(401).json({ success: false, message: "Username atau kata sandi ditolak!" });
 });
 
 app.use("/api", (req, res, next) => {
@@ -162,6 +164,7 @@ app.delete("/api/devices/:id", (req, res) => {
 // API COMMAND UNTUK START/STOP AHK DARI DASHBOARD
 // =================================================================
 const ahkCommands = installAhkCommands(app, deviceConnections);
+const systemCommands = installSystemCommands(app, deviceConnections);
 
 // =================================================================
 // API PUT UNTUK SAVE / UPDATE DATA MANUAL
@@ -204,9 +207,12 @@ app.put("/api/devices/:id", (req, res) => {
 // =================================================================
 // WEBSOCKET SERVER
 // =================================================================
+app.use('/api', (req,res)=>res.status(404).json({error:'Endpoint API tidak ditemukan'}));
 export const server = app.listen(PORT, process.env.HOST || "127.0.0.1", () =>
   console.log(`Server running on port ${PORT}`)
 );
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
 export const wss = new WebSocketServer({ server, maxPayload: 8 * 1024 * 1024 });
 
 const heartbeat = setInterval(() => {
@@ -237,7 +243,7 @@ wss.on("connection", (ws) => {
         ws.role = "agent"; clearTimeout(authTimer);
       }
       if (ws.role !== "agent") return;
-      if (desktop.handle(ws, data) || ahkCommands.handle(ws,data)) return;
+      if (desktop.handle(ws, data) || ahkCommands.handle(ws,data) || systemCommands.handle(ws,data)) return;
       if (data.type === "agent_auth" && currentDeviceId) return ws.close(1008, "Already registered");
 
 
@@ -248,6 +254,7 @@ wss.on("connection", (ws) => {
         const previous = deviceConnections.get(cleanId);
         deviceConnections.set(cleanId, ws);
         ws.deviceId = cleanId;
+        ws.systemEnabled = data.systemEnabled === true;
         if (previous && previous !== ws) previous.close(1000, "Replaced");
 
         savedDevices[cleanId] = {
@@ -261,7 +268,12 @@ wss.on("connection", (ws) => {
           ip: data.ip || "-",
           mac: data.mac || "-",
           desktopEnabled: data.desktopEnabled === true,
+          systemEnabled: data.systemEnabled === true,
+          shutdownAt: Number(data.shutdownAt) || 0,
+          shutdownError: String(data.shutdownError || "").slice(0,500),
           ahkKnown: data.ahkKnown === true,
+          ahkBlocked: data.ahkBlocked === true,
+          ahkPolicySupported: data.ahkPolicySupported === true,
           ahkError: typeof data.ahkError === "string" ? data.ahkError.slice(0,600) : "",
           ahkEnabled:
             typeof data.ahkEnabled === "boolean"
@@ -280,7 +292,11 @@ wss.on("connection", (ws) => {
         const cleanId = data.id.toString().trim().toLowerCase();
         if (savedDevices[cleanId]) {
           savedDevices[cleanId].ahkEnabled = !!data.ahkEnabled;
+          savedDevices[cleanId].shutdownAt = Number(data.shutdownAt) || 0;
+          savedDevices[cleanId].shutdownError = String(data.shutdownError || "").slice(0,500);
           savedDevices[cleanId].ahkKnown = data.ahkKnown === true;
+          savedDevices[cleanId].ahkBlocked = data.ahkBlocked === true;
+          savedDevices[cleanId].ahkPolicySupported = data.ahkPolicySupported === true;
           savedDevices[cleanId].ahkError = String(data.ahkError || "").slice(0,600);
           savedDevices[cleanId].lastSeen = new Date();
           saveCloudData(savedDevices);
@@ -297,6 +313,7 @@ wss.on("connection", (ws) => {
     clearTimeout(authTimer);
     desktop.disconnect(ws);
     ahkCommands.disconnect(ws);
+    systemCommands.disconnect(ws);
     if (currentDeviceId && deviceConnections.get(currentDeviceId) === ws) {
       deviceConnections.delete(currentDeviceId);
       broadcastToWeb();

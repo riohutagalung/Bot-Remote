@@ -1,5 +1,17 @@
 # Bot-Remote — pasang di laptop, kontrol tanpa Railway
 
+## Login dan kontrol terbaru
+
+Login memakai **Username** dan **Password** dari `DASHBOARD_USERNAME` dan `DASHBOARD_PASSWORD` pada backend. Jangan mengisi username pada pengaturan alamat server. Formulir menempatkan akun terlebih dahulu; alamat HTTPS backend berada dalam **Pengaturan koneksi laptop**. Vercel menyajikan dashboard, sedangkan agent dan backend berjalan di laptop.
+
+Pada laptop yang menjalankan agent, gunakan http://127.0.0.1:8080/. Untuk perangkat lain gunakan alamat HTTPS aktif dari `Backend-URL.txt`, lalu simpan pada pengaturan koneksi dashboard. Cloudflare Quick Tunnel sementara: alamat dapat berubah, tidak menjamin uptime, dan tidak dijamin gratis seumur hidup. Launcher mencoba memulihkan tunnel yang berhenti atau ditolak tanpa mematikan backend lokal.
+
+Kontrol AHK tersedia sebagai **Matikan sekali**, **Blokir AHK terus**, dan **Nonaktifkan blokir**. Tidak perlu memilih nama script. Kebijakan blokir disimpan lokal dan berlaku selama agent berjalan. `Nonaktifkan-Blokir.cmd` mencabutnya melalui API lokal jika tunnel terputus.
+
+Dengan `ALLOW_SYSTEM_CONTROL=1`, agent juga menerima permintaan **Tutup jendela aplikasi** dan **Matikan laptop** yang dikonfirmasi dari dashboard. Penutupan mempertahankan permintaan simpan dokumen, shell Windows, dan terminal agent. Shutdown memakai timer aplikasi 10 detik yang bisa dibatalkan, lalu meminta shutdown Windows tanpa menambahkan `/f`. Windows tetap dapat menolak operasi yang membutuhkan izin lebih tinggi. Pengujian otomatis memakai simulasi untuk operasi shutdown dan penutupan aplikasi.
+
+Agent dan launcher tetap terlihat serta bisa dihentikan pengguna. Default konfigurasi baru mematikan kontrol sistem dan kontrol layar. File `client.exe` lama dalam repository bukan build agent terbaru; gunakan sumber Node.js dan launcher yang dijelaskan di atas. Jangan mengunggah `.env`, token agent, password, file status perangkat, atau binary lama sebagai paket konfigurasi publik.
+
 Jalur utama versi ini: **HP/komputer pengontrol → Tailscale privat → dashboard di laptop → agent lokal → layar/mouse/keyboard**. Laptop menjalankan server dan client sekaligus. Tidak ada server Railway yang perlu disewa.
 
 ## Pemasangan satu kali pada laptop yang dikontrol

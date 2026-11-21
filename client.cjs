@@ -2,7 +2,7 @@
 // RH Remote Client - Stable Edition (background + unicode detect)
 // ============================================================
 const WebSocket = require("ws");
-const { execSync, spawn } = require("child_process");
+const { execSync } = require("child_process");
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
@@ -20,13 +20,16 @@ let wsGlobal = null;
 let statusAhkSaatIni = false;
 
 // ========= System Info =========
+let cachedIdentity = null;
 function getSystemInfo() {
+  // BIOS/WiFi subprocesses must not delay status messages or shutdown cancellation.
+  if (!cachedIdentity) cachedIdentity = {serial:getSerialNumber(),wifi:getWifiSSID()};
   return {
     hostname: os.hostname(),
     platform: os.platform(),
     arch: os.arch(),
-    serial: getSerialNumber(),
-    wifi: getWifiSSID(),
+    serial: cachedIdentity.serial,
+    wifi: cachedIdentity.wifi,
     ip: getLocalIP(),
     mac: getMAC(),
   };
@@ -68,52 +71,14 @@ function getMAC() {
 // Kontrol AHK (tidak diubah)
 // =============================================================
 const {readAhk,stopAhk} = require('./ahk-process.cjs');
-let ahkKnown = false;
-let ahkError = '';
-let checkingAhk = false;
-let ownedAhk = null;
-async function kendalikanAhkBalikLayar(aksi, namaScript = "") {
-  if (os.platform() !== "win32") return;
-  if (aksi === "stop") {
-    await stopAhk();
-    ownedAhk = null;
-    await periksaStatusAhk();
-    kirimTelemetri(); return;
-  }
-  if (await readAhk()) {await periksaStatusAhk();return;}
-  const file = namaScript || fs.readdirSync(CURRENT_DIR).find(f => f.toLowerCase().endsWith(".ahk"));
-  if (!file || path.basename(file) !== file || !/^[\w .-]+\.ahk$/i.test(file)) throw new Error("Nama script AHK tidak valid");
-  const full = path.join(CURRENT_DIR, file);
-  if (!fs.existsSync(full) || fs.lstatSync(full).isSymbolicLink()) throw new Error("Script AHK tidak tersedia");
-  const executable = process.env.AHK_EXE || [
-    "C:/Program Files/AutoHotkey/v2/AutoHotkey64.exe",
-    "C:/Program Files/AutoHotkey/AutoHotkey.exe",
-    "C:/Program Files/AutoHotkey/AutoHotkeyU64.exe"
-  ].find(f => fs.existsSync(f));
-  if (!executable) throw new Error("Set AHK_EXE ke lokasi AutoHotkey.exe");
-  await new Promise((resolve,reject) => {
-    ownedAhk = spawn(executable,[full],{windowsHide:true,stdio:'ignore'});
-    ownedAhk.once('spawn',resolve);
-    ownedAhk.once('error',error=>{ownedAhk=null;reject(new Error(`Gagal menjalankan AHK: ${error.code || error.message}`));});
-    ownedAhk.once('exit',()=>{ownedAhk=null;periksaStatusAhk();});
-  });
-  await new Promise(resolve=>setTimeout(resolve,500));
-  await periksaStatusAhk();
-  if(!ahkKnown || !statusAhkSaatIni) throw new Error(ahkError || 'AutoHotkey keluar setelah dimulai; periksa versi dan script.');
-}
-
-// =============================================================
-// Periksa status proses AHK (tambahan: deteksi AutoHotkey Unicode)
-// =============================================================
-async function periksaStatusAhk() {
-  if(checkingAhk) return;
-  checkingAhk=true;
-  const old=JSON.stringify([statusAhkSaatIni,ahkKnown,ahkError]);
-  try {statusAhkSaatIni=await readAhk();ahkKnown=true;ahkError='';}
-  catch(error){ahkKnown=false;ahkError=error.message;}
-  finally {checkingAhk=false;}
-  if(old!==JSON.stringify([statusAhkSaatIni,ahkKnown,ahkError])) kirimTelemetri();
-}
+const {createAhkPolicy} = require('./ahk-policy.cjs');
+const {createSystemControl} = require('./system-control.cjs');
+const systemControl = createSystemControl({onChange:kirimTelemetri});
+const ahkPolicy = createAhkPolicy({readAhk,stopAhk,file:path.join(CURRENT_DIR,'ahk-policy.json'),onChange:kirimTelemetri});
+async function periksaStatusAhk() { await ahkPolicy.refresh(); }
+// Enforce locally even while the dashboard or network is disconnected.
+periksaStatusAhk();
+statusTimer = setInterval(periksaStatusAhk, 2000);
 
 // =============================================================
 // Kirim Telemetry
@@ -124,7 +89,8 @@ function kirimTelemetri() {
   const data = {
     type: "ahk_status",
     id: (process.env.DEVICE_ID || (info.serial === "UNKNOWN" ? info.hostname : info.serial)).replace(/[^\w-]/g, "_"),
-    ahkEnabled: statusAhkSaatIni, ahkKnown, ahkError,
+    ...ahkPolicy.snapshot(),
+    systemEnabled: process.env.ALLOW_SYSTEM_CONTROL === "1", ...systemControl.snapshot(),
     hostname: info.hostname,
     model: `${info.platform} (${info.arch})`,
     wifi: info.wifi,
@@ -132,7 +98,7 @@ function kirimTelemetri() {
     mac: info.mac,
   };
   wsGlobal.send(JSON.stringify(data));
-  console.log(`[Telemetry] Status => ${statusAhkSaatIni ? "ON" : "OFF"}`);
+  console.log("[Telemetry]", JSON.stringify(ahkPolicy.snapshot()));
 }
 
 // =============================================================
@@ -155,13 +121,12 @@ function connectToServer() {
         wifi: info.wifi,
         ip: info.ip,
         mac: info.mac,
-        ahkEnabled: statusAhkSaatIni, ahkKnown, ahkError,
+        ...ahkPolicy.snapshot(),
+    systemEnabled: process.env.ALLOW_SYSTEM_CONTROL === "1", ...systemControl.snapshot(),
       })
     );
 
-    clearInterval(statusTimer);
     periksaStatusAhk();
-    statusTimer = setInterval(periksaStatusAhk, 5000);
   });
 
   ws.on("message", (msg) => {
@@ -178,14 +143,26 @@ function connectToServer() {
           }
         });
       }
+      if (data?.type === 'system_command') {
+        Promise.resolve().then(async()=>{
+          try {
+            if (ws !== wsGlobal || ws.readyState !== WebSocket.OPEN) return;
+            if (data.confirmed !== true) throw Error('Aksi sistem belum dikonfirmasi');
+            const result = await systemControl.execute(data.action);
+            if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'system_result',requestId:data.requestId,result}));
+          } catch(error) {
+            if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'system_result',requestId:data.requestId,error:error.message}));
+          }
+        });
+      }
       if (data && data.type === 'execute_command') {
         commandQueue = commandQueue.then(async()=>{
           try {
-            if(!['start_ahk','stop_ahk'].includes(data.action)) throw new Error('Perintah tidak valid');
-            await kendalikanAhkBalikLayar(data.action==='start_ahk'?'start':'stop',data.scriptName || '');
-            if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'command_result',requestId:data.requestId,ahkEnabled:statusAhkSaatIni}));
+            if (ws !== wsGlobal || ws.readyState !== WebSocket.OPEN) return;
+            const result = await ahkPolicy.command(data.action);
+            if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'command_result',requestId:data.requestId,...result}));
           } catch(error) {
-            ahkError=error.message; kirimTelemetri();
+            kirimTelemetri();
             if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'command_result',requestId:data.requestId,error:error.message}));
           }
         });
@@ -196,8 +173,7 @@ function connectToServer() {
   });
 
   ws.on("close", () => {
-    clearInterval(statusTimer);
-    console.log("⚠ Connection lost, retrying...");
+    console.log("⚠ Connection lost, retrying... Kebijakan AHK lokal tetap berlaku selama agent terbuka.");
     setTimeout(connectToServer, 5000);
   });
 
@@ -205,5 +181,6 @@ function connectToServer() {
 }
 
 console.log("RH Remote Client — Ctrl+C untuk memutus akses");
+console.log("Kontrol sistem:", process.env.ALLOW_SYSTEM_CONTROL === "1" ? "DIIZINKAN; shutdown memerlukan konfirmasi dashboard" : "NONAKTIF");
 console.log("Desktop control:", process.env.ALLOW_DESKTOP_CONTROL === "1" ? "DIIZINKAN" : "NONAKTIF");
 connectToServer();
